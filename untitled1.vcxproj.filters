@@ -1,0 +1,203 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Form Files">
+      <UniqueIdentifier>{99349809-55BA-4b9d-BF79-8FDBB0286EB3}</UniqueIdentifier>
+      <Extensions>ui</Extensions>
+      <ParseFiles>false</ParseFiles>
+    </Filter>
+    <Filter Include="Form Files">
+      <UniqueIdentifier>{99349809-55BA-4b9d-BF79-8FDBB0286EB3}</UniqueIdentifier>
+      <Extensions>ui</Extensions>
+      <ParseFiles>false</ParseFiles>
+    </Filter>
+    <Filter Include="Generated Files">
+      <UniqueIdentifier>{71ED8ED8-ACB9-4CE9-BBE1-E00B30144E11}</UniqueIdentifier>
+      <Extensions>cpp;c;cxx;moc;h;def;odl;idl;res;</Extensions>
+    </Filter>
+    <Filter Include="Generated Files">
+      <UniqueIdentifier>{71ED8ED8-ACB9-4CE9-BBE1-E00B30144E11}</UniqueIdentifier>
+      <Extensions>cpp;c;cxx;moc;h;def;odl;idl;res;</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{D9D6E242-F8AF-46E4-B9FD-80ECBC20BA3E}</UniqueIdentifier>
+      <Extensions>qrc;*</Extensions>
+      <ParseFiles>false</ParseFiles>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{D9D6E242-F8AF-46E4-B9FD-80ECBC20BA3E}</UniqueIdentifier>
+      <Extensions>qrc;*</Extensions>
+      <ParseFiles>false</ParseFiles>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="OperationRecord.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="base.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="classStream.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="graphcopy.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mainwindow.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="view.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="OperationRecord.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <QtMoc Include="base.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <ClInclude Include="classStream.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="graphcopy.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <QtMoc Include="mainwindow.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <ClInclude Include="view.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="debug\moc_predefs.h.cbt">
+      <Filter>Generated Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="release\moc_predefs.h.cbt">
+      <Filter>Generated Files</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <QtUic Include="mainwindow.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="image\Allowline.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\DataStorage.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\Database.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\Diamond.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\Document.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\Elliesp.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\Parallelogram.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\Rectangle.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\RoundedRectangle.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\Start_or_Terminator.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\Subprocess.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\Textpointer.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\background2.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\background4.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\black.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\blue.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\bold.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\bring-to-front.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\delete.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\green.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <QtRcc Include="img.qrc">
+      <Filter>Resource Files</Filter>
+    </QtRcc>
+    <None Include="image\italic.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\left.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\lessen.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\magnify.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\man.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\red.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\right.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\send-to-back.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\underline.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\white.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="image\yellow.png">
+      <Filter>Resource Files</Filter>
+    </None>
+  </ItemGroup>
+</Project>

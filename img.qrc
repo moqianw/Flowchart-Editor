@@ -1,0 +1,37 @@
+<RCC>
+    <qresource prefix="/form"/>
+    <qresource prefix="/">
+        <file>image/left.png</file>
+        <file>image/lessen.png</file>
+        <file>image/magnify.png</file>
+        <file>image/right.png</file>
+        <file>image/bring-to-front.png</file>
+        <file>image/send-to-back.png</file>
+        <file>image/DataStorage.png</file>
+        <file>image/Database.png</file>
+        <file>image/Subprocess.png</file>
+        <file>image/Start_or_Terminator.png</file>
+        <file>image/Parallelogram.png</file>
+        <file>image/Document.png</file>
+        <file>image/Diamond.png</file>
+        <file>image/RoundedRectangle.png</file>
+        <file>image/RoundedRectangle.png</file>
+        <file>image/Rectangle.png</file>
+        <file>image/Elliesp.png</file>
+        <file>image/man.png</file>
+        <file>image/background2.png</file>
+        <file>image/background4.png</file>
+        <file>image/bold.png</file>
+        <file>image/delete.png</file>
+        <file>image/italic.png</file>
+        <file>image/underline.png</file>
+        <file>image/black.png</file>
+        <file>image/blue.png</file>
+        <file>image/green.png</file>
+        <file>image/red.png</file>
+        <file>image/yellow.png</file>
+        <file>image/white.png</file>
+        <file>image/Allowline.png</file>
+        <file>image/Textpointer.png</file>
+    </qresource>
+</RCC>
