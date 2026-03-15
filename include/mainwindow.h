@@ -62,6 +62,7 @@ private:
     QDoubleSpinBox* m_heightSpin = nullptr;
     QDoubleSpinBox* m_rotationSpin = nullptr;
     QDoubleSpinBox* m_scaleSpin = nullptr;
+    QSpinBox* m_fillAlphaSpin = nullptr;
     QSpinBox* m_strokeWidthSpin = nullptr;
     bool m_syncingInspector = false;
 };

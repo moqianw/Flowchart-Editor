@@ -166,6 +166,7 @@ void MainWindow::setupInspectorDock() {
     m_heightSpin = new QDoubleSpinBox(content);
     m_rotationSpin = new QDoubleSpinBox(content);
     m_scaleSpin = new QDoubleSpinBox(content);
+    m_fillAlphaSpin = new QSpinBox(content);
     m_strokeWidthSpin = new QSpinBox(content);
 
     const QList<QDoubleSpinBox*> geometrySpins = {
@@ -188,6 +189,7 @@ void MainWindow::setupInspectorDock() {
     m_scaleSpin->setRange(0.2, 8.0);
     m_scaleSpin->setSingleStep(0.1);
     m_scaleSpin->setDecimals(2);
+    m_fillAlphaSpin->setRange(0, 255);
     m_strokeWidthSpin->setRange(1, 32);
 
     formLayout->addRow(QStringLiteral("类型"), m_itemTypeLabel);
@@ -199,6 +201,7 @@ void MainWindow::setupInspectorDock() {
     formLayout->addRow(QStringLiteral("高度"), m_heightSpin);
     formLayout->addRow(QStringLiteral("旋转"), m_rotationSpin);
     formLayout->addRow(QStringLiteral("缩放"), m_scaleSpin);
+    formLayout->addRow(QStringLiteral("填充透明度"), m_fillAlphaSpin);
     formLayout->addRow(QStringLiteral("线宽"), m_strokeWidthSpin);
 
     content->setLayout(formLayout);
@@ -225,6 +228,12 @@ void MainWindow::setupInspectorDock() {
     connect(m_heightSpin, &QAbstractSpinBox::editingFinished, this, applyGeometry);
     connect(m_rotationSpin, &QAbstractSpinBox::editingFinished, this, applyGeometry);
     connect(m_scaleSpin, &QAbstractSpinBox::editingFinished, this, applyGeometry);
+    connect(m_fillAlphaSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this](int value) {
+        if (m_syncingInspector || !m_session->hasSingleSelection()) {
+            return;
+        }
+        m_session->applyFillAlpha(value);
+    });
     connect(m_strokeWidthSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this](int value) {
         if (m_syncingInspector || !m_session->hasSingleSelection()) {
             return;
@@ -246,6 +255,11 @@ void MainWindow::setupAdvancedActions() {
     m_exportMermaidAction = new QAction(QStringLiteral("Mermaid"), this);
 
     ui->menu_4->addAction(m_exportMermaidAction);
+    if (m_inspectorDock) {
+        m_inspectorDock->toggleViewAction()->setText(QStringLiteral("属性面板"));
+        toolsMenu->addAction(m_inspectorDock->toggleViewAction());
+        toolsMenu->addSeparator();
+    }
     toolsMenu->addAction(m_autoLayoutAction);
     toolsMenu->addAction(m_validateAction);
     toolsMenu->addSeparator();
@@ -265,6 +279,7 @@ void MainWindow::updateInspector() {
     m_itemTypeLabel->setText(hasSingle ? item->typeId : QStringLiteral("未选择"));
     m_itemIdLabel->setText(hasSingle ? item->id : QStringLiteral("-"));
     m_textEdit->setEnabled(hasSingle);
+    m_fillAlphaSpin->setEnabled(hasSingle);
     m_strokeWidthSpin->setEnabled(hasSingle);
     m_xSpin->setEnabled(isNode);
     m_ySpin->setEnabled(isNode);
@@ -282,11 +297,13 @@ void MainWindow::updateInspector() {
         m_heightSpin->setValue(0.0);
         m_rotationSpin->setValue(0.0);
         m_scaleSpin->setValue(1.0);
+        m_fillAlphaSpin->setValue(0);
         m_syncingInspector = false;
         return;
     }
 
     m_textEdit->setText(item->text);
+    m_fillAlphaSpin->setValue(item->style.fillColor.alpha());
     m_strokeWidthSpin->setValue(item->style.strokeWidth);
 
     if (isNode) {
@@ -425,7 +442,18 @@ void MainWindow::bindUi() {
             return;
         }
         if (index == colors.size()) {
-            const QColor color = QColorDialog::getColor(QColor(255, 255, 255, 0), this, QStringLiteral("选择填充颜色"));
+            QColor initialColor(255, 255, 255, 0);
+            const QString itemId = currentSingleSelectedItemId();
+            if (!itemId.isEmpty()) {
+                if (const auto* item = m_session->document().item(itemId)) {
+                    initialColor = item->style.fillColor;
+                }
+            }
+            const QColor color = QColorDialog::getColor(
+                initialColor,
+                this,
+                QStringLiteral("选择填充颜色"),
+                QColorDialog::ShowAlphaChannel);
             if (color.isValid()) {
                 m_session->applyFillColor(color);
             }

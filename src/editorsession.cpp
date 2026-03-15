@@ -240,6 +240,14 @@ void EditorSession::applyFillColor(const QColor& color) {
     });
 }
 
+void EditorSession::applyFillAlpha(int alpha) {
+    applyToItems(selectedItemIds(), QStringLiteral("Change fill opacity"), [alpha](DiagramItemModel& item) {
+        QColor updated = item.style.fillColor;
+        updated.setAlpha(alpha);
+        item.style.fillColor = updated;
+    });
+}
+
 void EditorSession::applyStrokeWidth(int width) {
     applyToItems(selectedItemIds(), QStringLiteral("Change stroke width"), [width](DiagramItemModel& item) {
         item.style.strokeWidth = width;
@@ -737,6 +745,29 @@ void EditorSession::applyConnectorInteractive(
     }
     if (!updated->end.isAttached()) {
         updated->end.position = snapPoint(updated->end.position);
+    }
+    m_document.upsert(std::move(updated));
+    syncViewForItem(itemId);
+    emit documentChanged();
+}
+
+void EditorSession::applyConnectorBendInteractive(const QString& itemId, const QJsonObject& props) {
+    const auto* current = m_document.connector(itemId);
+    if (!current) {
+        return;
+    }
+
+    auto updated = std::make_unique<ConnectorModel>(*current);
+    updated->props = props;
+    if (updated->props.contains(QStringLiteral("bendX"))) {
+        updated->props.insert(
+            QStringLiteral("bendX"),
+            snapCoordinate(updated->props.value(QStringLiteral("bendX")).toDouble()));
+    }
+    if (updated->props.contains(QStringLiteral("bendY"))) {
+        updated->props.insert(
+            QStringLiteral("bendY"),
+            snapCoordinate(updated->props.value(QStringLiteral("bendY")).toDouble()));
     }
     m_document.upsert(std::move(updated));
     syncViewForItem(itemId);

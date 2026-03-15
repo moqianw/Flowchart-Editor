@@ -55,6 +55,7 @@ public:
 
     void applyStrokeColor(const QColor& color);
     void applyFillColor(const QColor& color);
+    void applyFillAlpha(int alpha);
     void applyStrokeWidth(int width);
     void applyFontFamily(const QFont& font);
     void applyFontSize(int pointSize);
@@ -93,6 +94,7 @@ public:
         const QString& itemId,
         const EndpointRef& start,
         const EndpointRef& end);
+    void applyConnectorBendInteractive(const QString& itemId, const QJsonObject& props);
 
     PortHit hitTestPort(const QPointF& scenePos, qreal threshold) const;
     QPointF resolveEndpoint(const EndpointRef& endpoint) const;

@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 namespace flowchart {
 
@@ -25,20 +26,40 @@ QRectF centeredRect(const QPointF& center, qreal size) {
     return QRectF(center.x() - size / 2.0, center.y() - size / 2.0, size, size);
 }
 
-QPainterPath arrowPath(const QPointF& start, const QPointF& end, qreal penWidth) {
+void appendSegmentPoint(QVector<QPointF>& segments, const QPointF& point) {
+    if (!segments.isEmpty() && QLineF(segments.back(), point).length() < 0.5) {
+        return;
+    }
+    segments.push_back(point);
+}
+
+QPainterPath arrowPath(
+    const QPointF& start,
+    const QPointF& end,
+    qreal penWidth,
+    const std::optional<qreal>& bendX = std::nullopt,
+    const std::optional<qreal>& bendY = std::nullopt) {
     QPainterPath path;
     QVector<QPointF> segments;
     segments.push_back(start);
 
     const qreal dx = end.x() - start.x();
     const qreal dy = end.y() - start.y();
-    if (std::abs(dx) < 1.0 || std::abs(dy) < 1.0) {
-        segments.push_back(end);
+    if (bendX.has_value()) {
+        appendSegmentPoint(segments, QPointF(*bendX, start.y()));
+        appendSegmentPoint(segments, QPointF(*bendX, end.y()));
+        appendSegmentPoint(segments, end);
+    } else if (bendY.has_value()) {
+        appendSegmentPoint(segments, QPointF(start.x(), *bendY));
+        appendSegmentPoint(segments, QPointF(end.x(), *bendY));
+        appendSegmentPoint(segments, end);
+    } else if (std::abs(dx) < 1.0 || std::abs(dy) < 1.0) {
+        appendSegmentPoint(segments, end);
     } else {
         const qreal midX = start.x() + dx / 2.0;
-        segments.push_back(QPointF(midX, start.y()));
-        segments.push_back(QPointF(midX, end.y()));
-        segments.push_back(end);
+        appendSegmentPoint(segments, QPointF(midX, start.y()));
+        appendSegmentPoint(segments, QPointF(midX, end.y()));
+        appendSegmentPoint(segments, end);
     }
 
     path.moveTo(segments.front());
@@ -455,6 +476,10 @@ void CanvasConnectorItem::paint(QPainter* painter, const QStyleOptionGraphicsIte
     painter->setBrush(QColor(255, 255, 255));
     painter->drawEllipse(handleRect(m_startPoint));
     painter->drawEllipse(handleRect(m_endPoint));
+    if (m_hasBendHandle) {
+        painter->setBrush(QColor(55, 126, 255));
+        painter->drawEllipse(handleRect(m_bendHandlePoint));
+    }
 }
 
 void CanvasConnectorItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
@@ -467,6 +492,8 @@ void CanvasConnectorItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
         m_activeHandle = EndpointHandle::Start;
     } else if (handleRect(m_endPoint).contains(event->pos())) {
         m_activeHandle = EndpointHandle::End;
+    } else if (m_hasBendHandle && handleRect(m_bendHandlePoint).contains(event->pos())) {
+        m_activeHandle = EndpointHandle::Bend;
     }
 
     if (m_activeHandle == EndpointHandle::None) {
@@ -479,13 +506,33 @@ void CanvasConnectorItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
         setSelected(true);
     }
 
-    m_session->beginInteractiveChange(QStringList{m_itemId}, QStringLiteral("Reconnect line"));
+    m_session->beginInteractiveChange(
+        QStringList{m_itemId},
+        m_activeHandle == EndpointHandle::Bend ? QStringLiteral("Adjust line bend") : QStringLiteral("Reconnect line"));
     event->accept();
 }
 
 void CanvasConnectorItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     if (m_activeHandle == EndpointHandle::None) {
         QGraphicsObject::mouseMoveEvent(event);
+        return;
+    }
+
+    if (m_activeHandle == EndpointHandle::Bend) {
+        const auto* model = m_session->document().connector(m_itemId);
+        if (!model) {
+            return;
+        }
+        QJsonObject props = model->props;
+        props.remove(QStringLiteral("bendX"));
+        props.remove(QStringLiteral("bendY"));
+        if (m_bendAdjustsX) {
+            props.insert(QStringLiteral("bendX"), event->scenePos().x());
+        } else {
+            props.insert(QStringLiteral("bendY"), event->scenePos().y());
+        }
+        m_session->applyConnectorBendInteractive(m_itemId, props);
+        event->accept();
         return;
     }
 
@@ -538,7 +585,44 @@ void CanvasConnectorItem::rebuildPath() {
         return;
     }
 
-    m_path = arrowPath(m_startPoint, m_endPoint, model->style.strokeWidth);
+    std::optional<qreal> bendX;
+    std::optional<qreal> bendY;
+
+    if (model->props.contains(QStringLiteral("bendX"))) {
+        bendX = model->props.value(QStringLiteral("bendX")).toDouble();
+    }
+    if (model->props.contains(QStringLiteral("bendY"))) {
+        bendY = model->props.value(QStringLiteral("bendY")).toDouble();
+    }
+
+    const qreal dx = std::abs(m_endPoint.x() - m_startPoint.x());
+    const qreal dy = std::abs(m_endPoint.y() - m_startPoint.y());
+    m_hasBendHandle = QLineF(m_startPoint, m_endPoint).length() >= 1.0;
+
+    if (bendX.has_value()) {
+        m_bendAdjustsX = true;
+        m_bendHandlePoint = QPointF(*bendX, (m_startPoint.y() + m_endPoint.y()) / 2.0);
+    } else if (bendY.has_value()) {
+        m_bendAdjustsX = false;
+        m_bendHandlePoint = QPointF((m_startPoint.x() + m_endPoint.x()) / 2.0, *bendY);
+    } else if (dy < 1.0) {
+        m_bendAdjustsX = false;
+        m_bendHandlePoint = QPointF((m_startPoint.x() + m_endPoint.x()) / 2.0, m_startPoint.y());
+    } else {
+        m_bendAdjustsX = true;
+        const qreal defaultBendX = dx < 1.0
+            ? m_startPoint.x()
+            : m_startPoint.x() + (m_endPoint.x() - m_startPoint.x()) / 2.0;
+        if (dx >= 1.0 && dy >= 1.0) {
+            bendX = defaultBendX;
+        }
+        m_bendHandlePoint = QPointF(defaultBendX, (m_startPoint.y() + m_endPoint.y()) / 2.0);
+    }
+
+    if (!m_hasBendHandle) {
+        m_bendHandlePoint = QPointF();
+    }
+    m_path = arrowPath(m_startPoint, m_endPoint, model->style.strokeWidth, bendX, bendY);
 }
 
 }  // namespace flowchart

@@ -112,6 +112,7 @@ private:
         None,
         Start,
         End,
+        Bend,
     };
 
     QRectF handleRect(const QPointF& point) const;
@@ -121,6 +122,9 @@ private:
     QString m_itemId;
     QPointF m_startPoint;
     QPointF m_endPoint;
+    QPointF m_bendHandlePoint;
+    bool m_hasBendHandle = false;
+    bool m_bendAdjustsX = true;
     QPainterPath m_path;
     bool m_syncing = false;
     EndpointHandle m_activeHandle = EndpointHandle::None;
