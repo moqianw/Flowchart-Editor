@@ -36,6 +36,7 @@ set(FLOWCHART_EDITOR_SOURCES
     src/mainwindow.cpp
     src/mermaidexporter.cpp
     src/palettebutton.cpp
+    src/sessionpersistence.cpp
     src/shaperegistry.cpp
     include/canvasitems.h
     include/canvasview.h
@@ -47,6 +48,7 @@ set(FLOWCHART_EDITOR_SOURCES
     include/mainwindow.h
     include/mermaidexporter.h
     include/palettebutton.h
+    include/sessionpersistence.h
     include/shaperegistry.h
     ui/mainwindow.ui
     resources/img.qrc

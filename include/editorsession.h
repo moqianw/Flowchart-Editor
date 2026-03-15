@@ -34,6 +34,7 @@ public:
     QUndoStack* undoStack() const;
     const ShapeRegistry& registry() const;
     const DiagramDocument& document() const;
+    std::vector<std::unique_ptr<DiagramItemModel>> exportDocumentSnapshot() const;
 
     QStringList selectedItemIds() const;
     void selectAll();
@@ -42,8 +43,10 @@ public:
 
     bool isDirty() const;
     void markClean();
+    void markDirty();
 
     void resetDocument();
+    void restoreRecoveredDocument(std::vector<std::unique_ptr<DiagramItemModel>> items);
     bool loadFromFile(const QString& fileName, QString* errorMessage);
     bool saveToFile(const QString& fileName, QString* errorMessage) const;
 
@@ -138,6 +141,7 @@ private:
 
     static QRectF itemsBoundingRect(const std::vector<std::unique_ptr<DiagramItemModel>>& items);
     qreal snapCoordinate(qreal value) const;
+    void emitDirtyStateIfChanged();
 
     ShapeRegistry m_registry;
     DiagramDocument m_document;
@@ -149,6 +153,8 @@ private:
     bool m_replayingCommand = false;
     bool m_snapToGridEnabled = true;
     int m_gridSize = 20;
+    bool m_forceDirty = false;
+    bool m_lastDirtyState = false;
 };
 
 }  // namespace flowchart

@@ -151,6 +151,42 @@ std::unique_ptr<DiagramItemModel> itemFromJson(const QJsonObject& object) {
 
 }  // namespace
 
+QJsonObject DocumentSerializer::toJsonObject(const std::vector<std::unique_ptr<DiagramItemModel>>& items) {
+    QJsonArray itemsArray;
+    for (const auto& item : items) {
+        itemsArray.push_back(itemToJson(*item));
+    }
+
+    return QJsonObject{
+        {QStringLiteral("version"), 1},
+        {QStringLiteral("items"), itemsArray},
+    };
+}
+
+std::vector<std::unique_ptr<DiagramItemModel>> DocumentSerializer::fromJsonObject(
+    const QJsonObject& root,
+    QString* errorMessage) {
+    const int version = root.value(QStringLiteral("version")).toInt(-1);
+    if (version != 1) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Unsupported document version.");
+        }
+        return {};
+    }
+
+    std::vector<std::unique_ptr<DiagramItemModel>> items;
+    const QJsonArray itemsArray = root.value(QStringLiteral("items")).toArray();
+    items.reserve(itemsArray.size());
+    for (const QJsonValue& value : itemsArray) {
+        if (!value.isObject()) {
+            continue;
+        }
+        items.push_back(itemFromJson(value.toObject()));
+    }
+
+    return items;
+}
+
 bool DocumentSerializer::save(
     const std::vector<std::unique_ptr<DiagramItemModel>>& items,
     const QString& fileName,
@@ -163,16 +199,7 @@ bool DocumentSerializer::save(
         return false;
     }
 
-    QJsonArray itemsArray;
-    for (const auto& item : items) {
-        itemsArray.push_back(itemToJson(*item));
-    }
-
-    const QJsonDocument document(QJsonObject{
-        {QStringLiteral("version"), 1},
-        {QStringLiteral("items"), itemsArray},
-    });
-
+    const QJsonDocument document(toJsonObject(items));
     if (file.write(document.toJson(QJsonDocument::Indented)) == -1) {
         if (errorMessage) {
             *errorMessage = file.errorString();
@@ -203,26 +230,7 @@ std::vector<std::unique_ptr<DiagramItemModel>> DocumentSerializer::load(
         return {};
     }
 
-    const QJsonObject root = document.object();
-    const int version = root.value(QStringLiteral("version")).toInt(-1);
-    if (version != 1) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral("Unsupported document version.");
-        }
-        return {};
-    }
-
-    std::vector<std::unique_ptr<DiagramItemModel>> items;
-    const QJsonArray itemsArray = root.value(QStringLiteral("items")).toArray();
-    items.reserve(itemsArray.size());
-    for (const QJsonValue& value : itemsArray) {
-        if (!value.isObject()) {
-            continue;
-        }
-        items.push_back(itemFromJson(value.toObject()));
-    }
-
-    return items;
+    return fromJsonObject(document.object(), errorMessage);
 }
 
 }  // namespace flowchart

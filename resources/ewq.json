@@ -1,0 +1,41 @@
+{
+    "items": [
+        {
+            "id": "f6e95c91-c61a-4334-adbb-ddab971e3033",
+            "kind": "node",
+            "props": {
+            },
+            "rect": {
+                "h": 100,
+                "w": 100,
+                "x": 1100,
+                "y": 740
+            },
+            "style": {
+                "bold": false,
+                "fillColor": {
+                    "a": 0,
+                    "b": 255,
+                    "g": 255,
+                    "r": 255
+                },
+                "font": "Microsoft YaHei,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1",
+                "italic": false,
+                "rotation": 0,
+                "scale": 1,
+                "strokeColor": {
+                    "a": 255,
+                    "b": 0,
+                    "g": 0,
+                    "r": 0
+                },
+                "strokeWidth": 2,
+                "underline": false
+            },
+            "text": "",
+            "typeId": "Ellipse",
+            "zValue": 1
+        }
+    ],
+    "version": 1
+}

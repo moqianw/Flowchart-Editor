@@ -43,8 +43,8 @@ EditorSession::EditorSession(QObject* parent)
     m_scene->setSceneRect(0.0, 0.0, 2400.0, 1600.0);
 
     connect(m_scene, &QGraphicsScene::selectionChanged, this, &EditorSession::selectionChanged);
-    connect(m_undoStack, &QUndoStack::cleanChanged, this, [this](bool clean) {
-        emit dirtyChanged(!clean);
+    connect(m_undoStack, &QUndoStack::cleanChanged, this, [this](bool) {
+        emitDirtyStateIfChanged();
     });
 }
 
@@ -62,6 +62,10 @@ const ShapeRegistry& EditorSession::registry() const {
 
 const DiagramDocument& EditorSession::document() const {
     return m_document;
+}
+
+std::vector<std::unique_ptr<DiagramItemModel>> EditorSession::exportDocumentSnapshot() const {
+    return cloneAllWithResolvedEndpoints();
 }
 
 QStringList EditorSession::selectedItemIds() const {
@@ -95,16 +99,27 @@ QString EditorSession::primarySelectedItemId() const {
 }
 
 bool EditorSession::isDirty() const {
-    return !m_undoStack->isClean();
+    return m_forceDirty || !m_undoStack->isClean();
 }
 
 void EditorSession::markClean() {
+    m_forceDirty = false;
     m_undoStack->setClean();
-    emit dirtyChanged(false);
+    emitDirtyStateIfChanged();
+}
+
+void EditorSession::markDirty() {
+    m_forceDirty = true;
+    emitDirtyStateIfChanged();
 }
 
 void EditorSession::resetDocument() {
     resetDocumentInternal({});
+}
+
+void EditorSession::restoreRecoveredDocument(std::vector<std::unique_ptr<DiagramItemModel>> items) {
+    resetDocumentInternal(std::move(items));
+    markDirty();
 }
 
 bool EditorSession::loadFromFile(const QString& fileName, QString* errorMessage) {
@@ -888,8 +903,8 @@ void EditorSession::resetDocumentInternal(std::vector<std::unique_ptr<DiagramIte
     m_clipboard.clear();
     m_pendingInteraction.reset();
     m_undoStack->clear();
-    m_undoStack->setClean();
-    emit dirtyChanged(false);
+    m_forceDirty = false;
+    emitDirtyStateIfChanged();
     emit documentChanged();
 }
 
@@ -1041,6 +1056,15 @@ qreal EditorSession::snapCoordinate(qreal value) const {
         return value;
     }
     return std::round(value / static_cast<qreal>(m_gridSize)) * static_cast<qreal>(m_gridSize);
+}
+
+void EditorSession::emitDirtyStateIfChanged() {
+    const bool dirty = isDirty();
+    if (dirty == m_lastDirtyState) {
+        return;
+    }
+    m_lastDirtyState = dirty;
+    emit dirtyChanged(dirty);
 }
 
 }  // namespace flowchart
