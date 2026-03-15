@@ -34,6 +34,7 @@ set(FLOWCHART_EDITOR_SOURCES
     src/editorsession.cpp
     src/main.cpp
     src/mainwindow.cpp
+    src/mermaidexporter.cpp
     src/palettebutton.cpp
     src/shaperegistry.cpp
     include/canvasitems.h
@@ -44,6 +45,7 @@ set(FLOWCHART_EDITOR_SOURCES
     include/documentserializer.h
     include/editorsession.h
     include/mainwindow.h
+    include/mermaidexporter.h
     include/palettebutton.h
     include/shaperegistry.h
     ui/mainwindow.ui

@@ -5,9 +5,11 @@
 #include "documentserializer.h"
 
 #include <QGraphicsItem>
+#include <QMap>
 #include <QSet>
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace flowchart {
@@ -83,6 +85,15 @@ void EditorSession::selectAll() {
     }
 }
 
+bool EditorSession::hasSingleSelection() const {
+    return selectedItemIds().size() == 1;
+}
+
+QString EditorSession::primarySelectedItemId() const {
+    const QStringList ids = selectedItemIds();
+    return ids.isEmpty() ? QString() : ids.front();
+}
+
 bool EditorSession::isDirty() const {
     return !m_undoStack->isClean();
 }
@@ -131,14 +142,15 @@ void EditorSession::createItem(const QString& typeId, const QPointF& scenePos) {
         if (definition->initializeStyle) {
             definition->initializeStyle(connector->style);
         }
-        connector->start.position = scenePos;
-        connector->end.position = scenePos + QPointF(definition->defaultSize.width(), definition->defaultSize.height());
+        connector->start.position = snapPoint(scenePos);
+        connector->end.position = snapPoint(
+            scenePos + QPointF(definition->defaultSize.width(), definition->defaultSize.height()));
         items.push_back(std::move(connector));
     } else {
         auto node = std::make_unique<NodeModel>();
         node->id = createItemId();
         node->typeId = definition->typeId;
-        node->rect = QRectF(scenePos, definition->defaultSize);
+        node->rect = snapRect(QRectF(scenePos, definition->defaultSize));
         node->props = definition->defaultProps;
         node->style = ItemStyle{};
         if (definition->initializeStyle) {
@@ -300,6 +312,358 @@ void EditorSession::setText(const QStringList& itemIds, const QString& text) {
     });
 }
 
+void EditorSession::updateNodeGeometry(
+    const QString& itemId,
+    const QRectF& rect,
+    qreal rotation,
+    qreal scale) {
+    const auto* current = m_document.node(itemId);
+    if (!current) {
+        return;
+    }
+
+    auto before = cloneItemsWithResolvedEndpoints(QStringList{itemId});
+    auto after = cloneModels(before);
+    auto* node = static_cast<NodeModel*>(after.front().get());
+    node->rect = snapRect(rect.normalized());
+    node->style.rotation = rotation;
+    node->style.scale = scale;
+
+    if (!vectorChanged(before, after)) {
+        return;
+    }
+
+    m_undoStack->push(new UpdateItemsCommand(
+        this,
+        std::move(before),
+        std::move(after),
+        QStringLiteral("Update node properties")));
+}
+
+void EditorSession::autoLayoutSelection() {
+    QStringList nodeIds = selectedItemIds();
+    if (nodeIds.isEmpty()) {
+        nodeIds = m_document.itemIds();
+    }
+
+    nodeIds.erase(
+        std::remove_if(nodeIds.begin(), nodeIds.end(), [this](const QString& id) {
+            return m_document.node(id) == nullptr;
+        }),
+        nodeIds.end());
+    nodeIds.removeDuplicates();
+
+    if (nodeIds.size() < 2) {
+        return;
+    }
+
+    const QSet<QString> nodeSet(nodeIds.begin(), nodeIds.end());
+    QHash<QString, QVector<QString>> outgoing;
+    QHash<QString, int> indegree;
+    for (const QString& nodeId : nodeIds) {
+        outgoing.insert(nodeId, {});
+        indegree.insert(nodeId, 0);
+    }
+
+    for (const QString& itemId : m_document.itemIds()) {
+        const auto* connector = m_document.connector(itemId);
+        if (!connector || !connector->start.isAttached() || !connector->end.isAttached()) {
+            continue;
+        }
+        if (!nodeSet.contains(connector->start.itemId) || !nodeSet.contains(connector->end.itemId)) {
+            continue;
+        }
+        if (connector->start.itemId == connector->end.itemId) {
+            continue;
+        }
+        outgoing[connector->start.itemId].push_back(connector->end.itemId);
+        indegree[connector->end.itemId] += 1;
+    }
+
+    auto nodePositionLess = [this](const QString& leftId, const QString& rightId) {
+        const auto* left = m_document.node(leftId);
+        const auto* right = m_document.node(rightId);
+        if (!left || !right) {
+            return leftId < rightId;
+        }
+        if (!qFuzzyCompare(left->rect.top() + 1.0, right->rect.top() + 1.0)) {
+            return left->rect.top() < right->rect.top();
+        }
+        if (!qFuzzyCompare(left->rect.left() + 1.0, right->rect.left() + 1.0)) {
+            return left->rect.left() < right->rect.left();
+        }
+        return leftId < rightId;
+    };
+
+    QStringList queue;
+    for (const QString& nodeId : nodeIds) {
+        if (indegree.value(nodeId) == 0) {
+            queue.push_back(nodeId);
+        }
+    }
+    std::sort(queue.begin(), queue.end(), nodePositionLess);
+
+    QHash<QString, int> layerByNode;
+    QStringList ordered;
+    while (!queue.isEmpty()) {
+        const QString current = queue.takeFirst();
+        ordered.push_back(current);
+        for (const QString& next : outgoing.value(current)) {
+            layerByNode[next] = std::max(layerByNode.value(next, 0), layerByNode.value(current, 0) + 1);
+            indegree[next] -= 1;
+            if (indegree[next] == 0) {
+                queue.push_back(next);
+            }
+        }
+        std::sort(queue.begin(), queue.end(), nodePositionLess);
+    }
+
+    QStringList remaining;
+    for (const QString& nodeId : nodeIds) {
+        if (!ordered.contains(nodeId)) {
+            remaining.push_back(nodeId);
+        }
+    }
+    std::sort(remaining.begin(), remaining.end(), nodePositionLess);
+
+    int fallbackLayer = 0;
+    for (const QString& nodeId : ordered) {
+        fallbackLayer = std::max(fallbackLayer, layerByNode.value(nodeId, 0));
+    }
+    for (const QString& nodeId : remaining) {
+        layerByNode[nodeId] = ++fallbackLayer;
+        ordered.push_back(nodeId);
+    }
+
+    QMap<int, QStringList> layers;
+    for (const QString& nodeId : ordered) {
+        layers[layerByNode.value(nodeId, 0)].push_back(nodeId);
+    }
+    for (auto it = layers.begin(); it != layers.end(); ++it) {
+        std::sort(it.value().begin(), it.value().end(), nodePositionLess);
+    }
+
+    auto before = cloneItemsWithResolvedEndpoints(nodeIds);
+    auto after = cloneModels(before);
+    QHash<QString, NodeModel*> byId;
+    for (auto& item : after) {
+        byId.insert(item->id, static_cast<NodeModel*>(item.get()));
+    }
+
+    constexpr qreal kStartX = 80.0;
+    constexpr qreal kStartY = 80.0;
+    constexpr qreal kColumnGap = 120.0;
+    constexpr qreal kRowGap = 80.0;
+
+    qreal currentX = kStartX;
+    for (auto it = layers.begin(); it != layers.end(); ++it) {
+        qreal currentY = kStartY;
+        qreal layerWidth = 0.0;
+        for (const QString& nodeId : it.value()) {
+            NodeModel* node = byId.value(nodeId, nullptr);
+            if (!node) {
+                continue;
+            }
+            QRectF rect = node->rect;
+            rect.moveTopLeft(snapPoint(QPointF(currentX, currentY)));
+            node->rect = rect;
+            currentY += rect.height() + kRowGap;
+            layerWidth = std::max(layerWidth, rect.width());
+        }
+        currentX += layerWidth + kColumnGap;
+    }
+
+    if (!vectorChanged(before, after)) {
+        return;
+    }
+
+    m_undoStack->push(new UpdateItemsCommand(
+        this,
+        std::move(before),
+        std::move(after),
+        QStringLiteral("Auto layout")));
+}
+
+QStringList EditorSession::validateDocument() const {
+    QStringList issues;
+    QStringList nodeIds;
+    QHash<QString, int> indegree;
+    QHash<QString, int> outdegree;
+    int terminatorCount = 0;
+
+    for (const QString& itemId : m_document.itemIds()) {
+        const auto* node = m_document.node(itemId);
+        if (!node) {
+            continue;
+        }
+        if (node->typeId == QStringLiteral("Textpointer")) {
+            continue;
+        }
+        nodeIds.push_back(itemId);
+        indegree.insert(itemId, 0);
+        outdegree.insert(itemId, 0);
+        if (node->typeId == QStringLiteral("Start_or_Terminator")) {
+            ++terminatorCount;
+        }
+    }
+
+    if (nodeIds.isEmpty()) {
+        issues.push_back(QStringLiteral("画布中没有节点。"));
+        return issues;
+    }
+
+    if (terminatorCount == 0) {
+        issues.push_back(QStringLiteral("未检测到开始/结束节点。"));
+    }
+
+    QSet<QString> connectedNodes;
+    int freeConnectorCount = 0;
+    int selfLoopCount = 0;
+
+    for (const QString& itemId : m_document.itemIds()) {
+        const auto* connector = m_document.connector(itemId);
+        if (!connector) {
+            continue;
+        }
+
+        if (!connector->start.isAttached() || !connector->end.isAttached()) {
+            ++freeConnectorCount;
+            continue;
+        }
+
+        connectedNodes.insert(connector->start.itemId);
+        connectedNodes.insert(connector->end.itemId);
+
+        if (connector->start.itemId == connector->end.itemId) {
+            ++selfLoopCount;
+            continue;
+        }
+
+        outdegree[connector->start.itemId] += 1;
+        indegree[connector->end.itemId] += 1;
+    }
+
+    if (freeConnectorCount > 0) {
+        issues.push_back(QStringLiteral("存在 %1 条未完整连接的连线。").arg(freeConnectorCount));
+    }
+    if (selfLoopCount > 0) {
+        issues.push_back(QStringLiteral("存在 %1 条自环连线。").arg(selfLoopCount));
+    }
+
+    int isolatedCount = 0;
+    for (const QString& nodeId : nodeIds) {
+        const auto* node = m_document.node(nodeId);
+        if (!node || node->typeId == QStringLiteral("Textpointer")) {
+            continue;
+        }
+        if (!connectedNodes.contains(nodeId)) {
+            ++isolatedCount;
+        }
+    }
+    if (isolatedCount > 0) {
+        issues.push_back(QStringLiteral("存在 %1 个未连接的节点。").arg(isolatedCount));
+    }
+
+    int entryCount = 0;
+    int terminalNodes = 0;
+    for (const QString& nodeId : nodeIds) {
+        if (indegree.value(nodeId) == 0) {
+            ++entryCount;
+        }
+        if (outdegree.value(nodeId) == 0) {
+            ++terminalNodes;
+        }
+    }
+
+    if (entryCount == 0) {
+        issues.push_back(QStringLiteral("未检测到入口节点，图中可能存在环路。"));
+    } else if (entryCount > 1) {
+        issues.push_back(QStringLiteral("检测到 %1 个入口节点。").arg(entryCount));
+    }
+
+    if (terminalNodes == 0) {
+        issues.push_back(QStringLiteral("未检测到出口节点。"));
+    } else if (terminalNodes > 1) {
+        issues.push_back(QStringLiteral("检测到 %1 个出口节点。").arg(terminalNodes));
+    }
+
+    QHash<QString, int> indegreeCopy = indegree;
+    QStringList queue;
+    for (const QString& nodeId : nodeIds) {
+        if (indegreeCopy.value(nodeId) == 0) {
+            queue.push_back(nodeId);
+        }
+    }
+
+    int visitedCount = 0;
+    while (!queue.isEmpty()) {
+        const QString current = queue.takeFirst();
+        ++visitedCount;
+        for (const QString& itemId : m_document.itemIds()) {
+            const auto* connector = m_document.connector(itemId);
+            if (!connector
+                || !connector->start.isAttached()
+                || !connector->end.isAttached()
+                || connector->start.itemId != current
+                || connector->start.itemId == connector->end.itemId) {
+                continue;
+            }
+            indegreeCopy[connector->end.itemId] -= 1;
+            if (indegreeCopy[connector->end.itemId] == 0) {
+                queue.push_back(connector->end.itemId);
+            }
+        }
+    }
+
+    if (visitedCount < nodeIds.size()) {
+        issues.push_back(QStringLiteral("检测到环路，建议检查分支回流。"));
+    }
+
+    return issues;
+}
+
+bool EditorSession::snapToGridEnabled() const {
+    return m_snapToGridEnabled;
+}
+
+void EditorSession::setSnapToGridEnabled(bool enabled) {
+    if (m_snapToGridEnabled == enabled) {
+        return;
+    }
+    m_snapToGridEnabled = enabled;
+    emit documentChanged();
+}
+
+int EditorSession::gridSize() const {
+    return m_gridSize;
+}
+
+QPointF EditorSession::snapPoint(const QPointF& point) const {
+    if (!m_snapToGridEnabled) {
+        return point;
+    }
+    return QPointF(snapCoordinate(point.x()), snapCoordinate(point.y()));
+}
+
+QRectF EditorSession::snapRect(const QRectF& rect) const {
+    if (!m_snapToGridEnabled) {
+        return rect;
+    }
+
+    const QPointF topLeft = snapPoint(rect.topLeft());
+    const QPointF bottomRight = snapPoint(rect.bottomRight());
+    QRectF snapped(topLeft, bottomRight);
+
+    if (snapped.width() < 1.0) {
+        snapped.setWidth(std::max<qreal>(rect.width(), 1.0));
+    }
+    if (snapped.height() < 1.0) {
+        snapped.setHeight(std::max<qreal>(rect.height(), 1.0));
+    }
+
+    return snapped.normalized();
+}
+
 void EditorSession::beginInteractiveChange(const QStringList& itemIds, const QString& description) {
     if (m_replayingCommand || itemIds.isEmpty() || m_pendingInteraction.has_value()) {
         return;
@@ -347,12 +711,13 @@ void EditorSession::applyNodeGeometryInteractive(
     }
 
     auto updated = std::make_unique<NodeModel>(*current);
-    updated->rect = rect.normalized();
+    updated->rect = snapRect(rect.normalized());
     updated->style.rotation = rotation;
     updated->style.scale = scale;
     m_document.upsert(std::move(updated));
     syncViewForItem(itemId);
     refreshConnectorsForNode(itemId);
+    emit documentChanged();
 }
 
 void EditorSession::applyConnectorInteractive(
@@ -367,8 +732,15 @@ void EditorSession::applyConnectorInteractive(
     auto updated = std::make_unique<ConnectorModel>(*current);
     updated->start = start;
     updated->end = end;
+    if (!updated->start.isAttached()) {
+        updated->start.position = snapPoint(updated->start.position);
+    }
+    if (!updated->end.isAttached()) {
+        updated->end.position = snapPoint(updated->end.position);
+    }
     m_document.upsert(std::move(updated));
     syncViewForItem(itemId);
+    emit documentChanged();
 }
 
 PortHit EditorSession::hitTestPort(const QPointF& scenePos, qreal threshold) const {
@@ -433,6 +805,7 @@ void EditorSession::insertItemsInternal(const std::vector<std::unique_ptr<Diagra
     }
 
     m_replayingCommand = false;
+    emit documentChanged();
 }
 
 void EditorSession::removeItemsInternal(const QStringList& itemIds) {
@@ -445,6 +818,7 @@ void EditorSession::removeItemsInternal(const QStringList& itemIds) {
 
     refreshAllConnectors();
     m_replayingCommand = false;
+    emit documentChanged();
 }
 
 void EditorSession::replaceItemsInternal(const std::vector<std::unique_ptr<DiagramItemModel>>& items) {
@@ -460,6 +834,7 @@ void EditorSession::replaceItemsInternal(const std::vector<std::unique_ptr<Diagr
 
     refreshAllConnectors();
     m_replayingCommand = false;
+    emit documentChanged();
 }
 
 void EditorSession::resetDocumentInternal(std::vector<std::unique_ptr<DiagramItemModel>> items) {
@@ -484,6 +859,7 @@ void EditorSession::resetDocumentInternal(std::vector<std::unique_ptr<DiagramIte
     m_undoStack->clear();
     m_undoStack->setClean();
     emit dirtyChanged(false);
+    emit documentChanged();
 }
 
 void EditorSession::createViewForItem(const QString& itemId) {
@@ -627,6 +1003,13 @@ QRectF EditorSession::itemsBoundingRect(const std::vector<std::unique_ptr<Diagra
     }
 
     return bounds;
+}
+
+qreal EditorSession::snapCoordinate(qreal value) const {
+    if (!m_snapToGridEnabled || m_gridSize <= 1) {
+        return value;
+    }
+    return std::round(value / static_cast<qreal>(m_gridSize)) * static_cast<qreal>(m_gridSize);
 }
 
 }  // namespace flowchart

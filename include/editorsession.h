@@ -37,6 +37,8 @@ public:
 
     QStringList selectedItemIds() const;
     void selectAll();
+    bool hasSingleSelection() const;
+    QString primarySelectedItemId() const;
 
     bool isDirty() const;
     void markClean();
@@ -64,6 +66,19 @@ public:
     void bringForward();
     void sendBackward();
     void setText(const QStringList& itemIds, const QString& text);
+    void updateNodeGeometry(
+        const QString& itemId,
+        const QRectF& rect,
+        qreal rotation,
+        qreal scale);
+    void autoLayoutSelection();
+    QStringList validateDocument() const;
+
+    bool snapToGridEnabled() const;
+    void setSnapToGridEnabled(bool enabled);
+    int gridSize() const;
+    QPointF snapPoint(const QPointF& point) const;
+    QRectF snapRect(const QRectF& rect) const;
 
     void beginInteractiveChange(const QStringList& itemIds, const QString& description);
     bool isInteractiveChangeActiveFor(const QString& itemId) const;
@@ -85,6 +100,7 @@ public:
 signals:
     void selectionChanged();
     void dirtyChanged(bool dirty);
+    void documentChanged();
 
 private:
     friend class AddItemsCommand;
@@ -119,6 +135,7 @@ private:
     std::vector<std::unique_ptr<DiagramItemModel>> cloneAllWithResolvedEndpoints() const;
 
     static QRectF itemsBoundingRect(const std::vector<std::unique_ptr<DiagramItemModel>>& items);
+    qreal snapCoordinate(qreal value) const;
 
     ShapeRegistry m_registry;
     DiagramDocument m_document;
@@ -128,6 +145,8 @@ private:
     std::vector<std::unique_ptr<DiagramItemModel>> m_clipboard;
     std::optional<PendingInteraction> m_pendingInteraction;
     bool m_replayingCommand = false;
+    bool m_snapToGridEnabled = true;
+    int m_gridSize = 20;
 };
 
 }  // namespace flowchart

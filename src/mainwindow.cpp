@@ -3,11 +3,20 @@
 #include "ui_mainwindow.h"
 
 #include "palettebutton.h"
+#include "mermaidexporter.h"
 
+#include <QAbstractSpinBox>
+#include <QAction>
+#include <QCheckBox>
 #include <QFileInfo>
+#include <QFormLayout>
 #include <QFrame>
+#include <QKeySequence>
+#include <QMenu>
+#include <QMenuBar>
 #include <QMessageBox>
 #include <QScrollArea>
+#include <QStatusBar>
 #include <QToolButton>
 
 MainWindow::MainWindow(QWidget* parent)
@@ -24,8 +33,11 @@ MainWindow::MainWindow(QWidget* parent)
     ui->gridLayout->addWidget(m_view);
 
     populatePalette();
+    setupWorkspaceEnhancements();
     bindUi();
     updateWindowTitle();
+    updateInspector();
+    updateStatusSummary();
 }
 
 bool MainWindow::maybeSave() {
@@ -127,9 +139,236 @@ void MainWindow::populatePalette() {
     }
 }
 
+void MainWindow::setupWorkspaceEnhancements() {
+    setupInspectorDock();
+    setupAdvancedActions();
+
+    m_statusSummaryLabel = new QLabel(this);
+    statusBar()->addPermanentWidget(m_statusSummaryLabel, 1);
+}
+
+void MainWindow::setupInspectorDock() {
+    m_inspectorDock = new QDockWidget(QStringLiteral("属性"), this);
+    m_inspectorDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+
+    auto* content = new QWidget(m_inspectorDock);
+    auto* formLayout = new QFormLayout(content);
+    formLayout->setContentsMargins(10, 10, 10, 10);
+    formLayout->setSpacing(8);
+
+    m_itemTypeLabel = new QLabel(QStringLiteral("-"), content);
+    m_itemIdLabel = new QLabel(QStringLiteral("-"), content);
+    m_itemIdLabel->setWordWrap(true);
+    m_textEdit = new QLineEdit(content);
+    m_xSpin = new QDoubleSpinBox(content);
+    m_ySpin = new QDoubleSpinBox(content);
+    m_widthSpin = new QDoubleSpinBox(content);
+    m_heightSpin = new QDoubleSpinBox(content);
+    m_rotationSpin = new QDoubleSpinBox(content);
+    m_scaleSpin = new QDoubleSpinBox(content);
+    m_strokeWidthSpin = new QSpinBox(content);
+
+    const QList<QDoubleSpinBox*> geometrySpins = {
+        m_xSpin,
+        m_ySpin,
+        m_widthSpin,
+        m_heightSpin,
+        m_rotationSpin,
+        m_scaleSpin,
+    };
+    for (QDoubleSpinBox* spin : geometrySpins) {
+        spin->setRange(-10000.0, 10000.0);
+        spin->setDecimals(1);
+        spin->setSingleStep(10.0);
+    }
+    m_widthSpin->setRange(20.0, 4000.0);
+    m_heightSpin->setRange(20.0, 4000.0);
+    m_rotationSpin->setRange(-360.0, 360.0);
+    m_rotationSpin->setSingleStep(15.0);
+    m_scaleSpin->setRange(0.2, 8.0);
+    m_scaleSpin->setSingleStep(0.1);
+    m_scaleSpin->setDecimals(2);
+    m_strokeWidthSpin->setRange(1, 32);
+
+    formLayout->addRow(QStringLiteral("类型"), m_itemTypeLabel);
+    formLayout->addRow(QStringLiteral("ID"), m_itemIdLabel);
+    formLayout->addRow(QStringLiteral("文本"), m_textEdit);
+    formLayout->addRow(QStringLiteral("X"), m_xSpin);
+    formLayout->addRow(QStringLiteral("Y"), m_ySpin);
+    formLayout->addRow(QStringLiteral("宽度"), m_widthSpin);
+    formLayout->addRow(QStringLiteral("高度"), m_heightSpin);
+    formLayout->addRow(QStringLiteral("旋转"), m_rotationSpin);
+    formLayout->addRow(QStringLiteral("缩放"), m_scaleSpin);
+    formLayout->addRow(QStringLiteral("线宽"), m_strokeWidthSpin);
+
+    content->setLayout(formLayout);
+    m_inspectorDock->setWidget(content);
+    addDockWidget(Qt::RightDockWidgetArea, m_inspectorDock);
+
+    const auto applyGeometry = [this]() {
+        if (!m_syncingInspector) {
+            applyInspectorGeometry();
+        }
+    };
+    connect(m_textEdit, &QLineEdit::editingFinished, this, [this]() {
+        if (m_syncingInspector) {
+            return;
+        }
+        const QString itemId = currentSingleSelectedItemId();
+        if (!itemId.isEmpty()) {
+            m_session->setText(QStringList{itemId}, m_textEdit->text());
+        }
+    });
+    connect(m_xSpin, &QAbstractSpinBox::editingFinished, this, applyGeometry);
+    connect(m_ySpin, &QAbstractSpinBox::editingFinished, this, applyGeometry);
+    connect(m_widthSpin, &QAbstractSpinBox::editingFinished, this, applyGeometry);
+    connect(m_heightSpin, &QAbstractSpinBox::editingFinished, this, applyGeometry);
+    connect(m_rotationSpin, &QAbstractSpinBox::editingFinished, this, applyGeometry);
+    connect(m_scaleSpin, &QAbstractSpinBox::editingFinished, this, applyGeometry);
+    connect(m_strokeWidthSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this](int value) {
+        if (m_syncingInspector || !m_session->hasSingleSelection()) {
+            return;
+        }
+        Q_UNUSED(value);
+        m_session->applyStrokeWidth(m_strokeWidthSpin->value());
+    });
+}
+
+void MainWindow::setupAdvancedActions() {
+    auto* toolsMenu = menuBar()->addMenu(QStringLiteral("工具"));
+    m_autoLayoutAction = new QAction(QStringLiteral("自动布局"), this);
+    m_autoLayoutAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+L")));
+    m_validateAction = new QAction(QStringLiteral("校验流程图"), this);
+    m_validateAction->setShortcut(QKeySequence(QStringLiteral("F7")));
+    m_snapToGridAction = new QAction(QStringLiteral("吸附到网格"), this);
+    m_snapToGridAction->setCheckable(true);
+    m_snapToGridAction->setChecked(m_session->snapToGridEnabled());
+    m_exportMermaidAction = new QAction(QStringLiteral("Mermaid"), this);
+
+    ui->menu_4->addAction(m_exportMermaidAction);
+    toolsMenu->addAction(m_autoLayoutAction);
+    toolsMenu->addAction(m_validateAction);
+    toolsMenu->addSeparator();
+    toolsMenu->addAction(m_snapToGridAction);
+}
+
+void MainWindow::updateInspector() {
+    m_syncingInspector = true;
+
+    const QString itemId = currentSingleSelectedItemId();
+    const auto* item = itemId.isEmpty() ? nullptr : m_session->document().item(itemId);
+    const auto* node = itemId.isEmpty() ? nullptr : m_session->document().node(itemId);
+
+    const bool hasSingle = item != nullptr;
+    const bool isNode = node != nullptr;
+
+    m_itemTypeLabel->setText(hasSingle ? item->typeId : QStringLiteral("未选择"));
+    m_itemIdLabel->setText(hasSingle ? item->id : QStringLiteral("-"));
+    m_textEdit->setEnabled(hasSingle);
+    m_strokeWidthSpin->setEnabled(hasSingle);
+    m_xSpin->setEnabled(isNode);
+    m_ySpin->setEnabled(isNode);
+    m_widthSpin->setEnabled(isNode);
+    m_heightSpin->setEnabled(isNode);
+    m_rotationSpin->setEnabled(isNode);
+    m_scaleSpin->setEnabled(isNode);
+
+    if (!hasSingle) {
+        m_textEdit->clear();
+        m_strokeWidthSpin->setValue(1);
+        m_xSpin->setValue(0.0);
+        m_ySpin->setValue(0.0);
+        m_widthSpin->setValue(0.0);
+        m_heightSpin->setValue(0.0);
+        m_rotationSpin->setValue(0.0);
+        m_scaleSpin->setValue(1.0);
+        m_syncingInspector = false;
+        return;
+    }
+
+    m_textEdit->setText(item->text);
+    m_strokeWidthSpin->setValue(item->style.strokeWidth);
+
+    if (isNode) {
+        m_xSpin->setValue(node->rect.x());
+        m_ySpin->setValue(node->rect.y());
+        m_widthSpin->setValue(node->rect.width());
+        m_heightSpin->setValue(node->rect.height());
+        m_rotationSpin->setValue(node->style.rotation);
+        m_scaleSpin->setValue(node->style.scale);
+    } else {
+        m_xSpin->setValue(0.0);
+        m_ySpin->setValue(0.0);
+        m_widthSpin->setValue(0.0);
+        m_heightSpin->setValue(0.0);
+        m_rotationSpin->setValue(0.0);
+        m_scaleSpin->setValue(1.0);
+    }
+
+    m_syncingInspector = false;
+}
+
+void MainWindow::updateStatusSummary() {
+    int nodeCount = 0;
+    int connectorCount = 0;
+    for (const QString& itemId : m_session->document().itemIds()) {
+        if (m_session->document().node(itemId)) {
+            ++nodeCount;
+        } else if (m_session->document().connector(itemId)) {
+            ++connectorCount;
+        }
+    }
+
+    const QStringList issues = m_session->validateDocument();
+    const QString validationState = issues.isEmpty()
+        ? QStringLiteral("校验通过")
+        : QStringLiteral("警告 %1").arg(issues.size());
+
+    if (m_statusSummaryLabel) {
+        m_statusSummaryLabel->setText(QStringLiteral(
+            "节点 %1 | 连线 %2 | 选中 %3 | 网格吸附 %4 | %5")
+                .arg(nodeCount)
+                .arg(connectorCount)
+                .arg(m_session->selectedItemIds().size())
+                .arg(m_session->snapToGridEnabled() ? QStringLiteral("开") : QStringLiteral("关"))
+                .arg(validationState));
+    }
+}
+
+void MainWindow::applyInspectorGeometry() {
+    const QString itemId = currentSingleSelectedItemId();
+    const auto* node = itemId.isEmpty() ? nullptr : m_session->document().node(itemId);
+    if (!node) {
+        return;
+    }
+
+    const QRectF rect(
+        m_xSpin->value(),
+        m_ySpin->value(),
+        m_widthSpin->value(),
+        m_heightSpin->value());
+    m_session->updateNodeGeometry(
+        itemId,
+        rect,
+        m_rotationSpin->value(),
+        m_scaleSpin->value());
+}
+
+QString MainWindow::currentSingleSelectedItemId() const {
+    return m_session->hasSingleSelection() ? m_session->primarySelectedItemId() : QString();
+}
+
 void MainWindow::bindUi() {
     connect(m_session, &flowchart::EditorSession::dirtyChanged, this, [this](bool) {
         updateWindowTitle();
+    });
+    connect(m_session, &flowchart::EditorSession::selectionChanged, this, [this]() {
+        updateInspector();
+        updateStatusSummary();
+    });
+    connect(m_session, &flowchart::EditorSession::documentChanged, this, [this]() {
+        updateInspector();
+        updateStatusSummary();
     });
 
     connect(ui->fontComboBox, &QFontComboBox::currentFontChanged, this, [this](const QFont& font) {
@@ -298,6 +537,40 @@ void MainWindow::bindUi() {
             fileName += QStringLiteral(".png");
         }
         m_view->exportToPng(fileName);
+    });
+
+    connect(m_autoLayoutAction, &QAction::triggered, this, [this]() {
+        m_session->autoLayoutSelection();
+    });
+    connect(m_validateAction, &QAction::triggered, this, [this]() {
+        const QStringList issues = m_session->validateDocument();
+        if (issues.isEmpty()) {
+            QMessageBox::information(this, QStringLiteral("流程图校验"), QStringLiteral("校验通过，未发现结构问题。"));
+            return;
+        }
+        QMessageBox::warning(this, QStringLiteral("流程图校验"), issues.join(QLatin1Char('\n')));
+    });
+    connect(m_snapToGridAction, &QAction::toggled, this, [this](bool checked) {
+        m_session->setSnapToGridEnabled(checked);
+        updateStatusSummary();
+    });
+    connect(m_exportMermaidAction, &QAction::triggered, this, [this]() {
+        QString fileName = QFileDialog::getSaveFileName(
+            this,
+            QStringLiteral("导出 Mermaid"),
+            QString(),
+            QStringLiteral("Mermaid (*.mmd *.mermaid *.txt)"));
+        if (fileName.isEmpty()) {
+            return;
+        }
+        if (QFileInfo(fileName).suffix().isEmpty()) {
+            fileName += QStringLiteral(".mmd");
+        }
+
+        QString error;
+        if (!flowchart::MermaidExporter::save(m_session->document(), fileName, &error)) {
+            QMessageBox::critical(this, QStringLiteral("导出失败"), error);
+        }
     });
 }
 

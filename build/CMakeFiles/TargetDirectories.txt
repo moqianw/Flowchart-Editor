@@ -1,3 +1,0 @@
-E:/Documents/qt/Flowchart-Editor-master/build/CMakeFiles/FlowchartEditor.dir
-E:/Documents/qt/Flowchart-Editor-master/build/CMakeFiles/ALL_BUILD.dir
-E:/Documents/qt/Flowchart-Editor-master/build/CMakeFiles/ZERO_CHECK.dir

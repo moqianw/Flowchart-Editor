@@ -4,6 +4,7 @@
 #include "shaperegistry.h"
 
 #include <QFocusEvent>
+#include <QLineF>
 #include <QGraphicsSceneMouseEvent>
 #include <QPainter>
 #include <QStyleOptionGraphicsItem>
@@ -26,10 +27,27 @@ QRectF centeredRect(const QPointF& center, qreal size) {
 
 QPainterPath arrowPath(const QPointF& start, const QPointF& end, qreal penWidth) {
     QPainterPath path;
-    path.moveTo(start);
-    path.lineTo(end);
+    QVector<QPointF> segments;
+    segments.push_back(start);
 
-    const qreal angle = std::atan2(end.y() - start.y(), end.x() - start.x());
+    const qreal dx = end.x() - start.x();
+    const qreal dy = end.y() - start.y();
+    if (std::abs(dx) < 1.0 || std::abs(dy) < 1.0) {
+        segments.push_back(end);
+    } else {
+        const qreal midX = start.x() + dx / 2.0;
+        segments.push_back(QPointF(midX, start.y()));
+        segments.push_back(QPointF(midX, end.y()));
+        segments.push_back(end);
+    }
+
+    path.moveTo(segments.front());
+    for (int index = 1; index < segments.size(); ++index) {
+        path.lineTo(segments[index]);
+    }
+
+    const QPointF arrowBase = segments.size() >= 2 ? segments[segments.size() - 2] : start;
+    const qreal angle = std::atan2(end.y() - arrowBase.y(), end.x() - arrowBase.x());
     const qreal arrowSize = std::max<qreal>(penWidth * 3.0, 8.0);
     const QPointF arrowP1 = end - QPointF(
         arrowSize * std::cos(angle + kPi / 6.0),
@@ -169,6 +187,10 @@ void CanvasNodeItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, Q
 }
 
 QVariant CanvasNodeItem::itemChange(GraphicsItemChange change, const QVariant& value) {
+    if (!m_syncing && change == ItemPositionChange) {
+        return m_session->snapPoint(value.toPointF());
+    }
+
     if (!m_syncing && change == ItemPositionHasChanged && m_session->isInteractiveChangeActiveFor(m_itemId)) {
         const auto* model = m_session->document().node(m_itemId);
         if (model) {
@@ -410,7 +432,7 @@ void CanvasConnectorItem::syncFromModel() {
 }
 
 QRectF CanvasConnectorItem::boundingRect() const {
-    return QRectF(m_startPoint, m_endPoint).normalized().adjusted(-16.0, -16.0, 16.0, 16.0);
+    return m_path.boundingRect().adjusted(-16.0, -16.0, 16.0, 16.0);
 }
 
 void CanvasConnectorItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) {
