@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 #include "canvasview.h"
 #include "editorsession.h"
+#include "peercollaborationmanager.h"
 
 #include <QCloseEvent>
 #include <QMainWindow>
@@ -12,13 +13,13 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QPlainTextEdit>
 #include <QDoubleSpinBox>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QTimer>
 #include <QAction>
-#include <QPlainTextEdit>
 #include <QVBoxLayout>
 
 QT_BEGIN_NAMESPACE
@@ -50,12 +51,14 @@ private:
     void setupWelcomeView();
     void setupInspectorDock();
     void setupComponentsDock();
+    void setupCollaborationDock();
     void setupAdvancedActions();
     void setupPersistence();
     void updateDocumentAvailability();
     void updateInspector();
     void updateStatusSummary();
     void updateConnectorActions();
+    void updateCollaborationUi();
     void applyInspectorGeometry();
     void updateRecentFilesMenu();
     void updateRecentFilesWelcomeList();
@@ -70,6 +73,9 @@ private:
     void saveManagedComponentChanges();
     void exportManagedComponent();
     void deleteManagedComponent();
+    void startHostingCollaboration();
+    void joinPeerCollaboration();
+    void disconnectCollaboration();
     void persistRecoverySnapshot();
     void discardRecoverySnapshot();
     void restoreRecoverySnapshotIfAvailable();
@@ -101,6 +107,7 @@ private:
     QLabel* m_statusSummaryLabel = nullptr;
     QDockWidget* m_inspectorDock = nullptr;
     QDockWidget* m_componentsDock = nullptr;
+    QDockWidget* m_collaborationDock = nullptr;
     QLabel* m_itemTypeLabel = nullptr;
     QLabel* m_itemIdLabel = nullptr;
     QLineEdit* m_textEdit = nullptr;
@@ -120,7 +127,17 @@ private:
     QPushButton* m_componentSaveButton = nullptr;
     QPushButton* m_componentExportButton = nullptr;
     QPushButton* m_componentDeleteButton = nullptr;
+    QLineEdit* m_collaborationNameEdit = nullptr;
+    QLineEdit* m_collaborationHostEdit = nullptr;
+    QSpinBox* m_collaborationPortSpin = nullptr;
+    QLabel* m_collaborationStatusLabel = nullptr;
+    QLabel* m_collaborationPeerLabel = nullptr;
+    QPushButton* m_collaborationHostButton = nullptr;
+    QPushButton* m_collaborationJoinButton = nullptr;
+    QPushButton* m_collaborationDisconnectButton = nullptr;
+    QPlainTextEdit* m_collaborationLogEdit = nullptr;
     QTimer* m_autoSaveTimer = nullptr;
+    flowchart::PeerCollaborationManager* m_collaborationManager = nullptr;
     bool m_syncingInspector = false;
     bool m_syncingConnectorControls = false;
     bool m_hasActiveDocument = false;

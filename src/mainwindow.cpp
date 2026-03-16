@@ -28,6 +28,7 @@
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStatusBar>
+#include <QTextDocument>
 #include <QToolButton>
 #include <QUrl>
 
@@ -35,6 +36,7 @@ MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
     , m_session(new flowchart::EditorSession(this))
+    , m_collaborationManager(new flowchart::PeerCollaborationManager(m_session, this))
     , m_view(new flowchart::CanvasView(m_session, this)) {
     ui->setupUi(this);
     ui->toolBox->setMinimumWidth(220);
@@ -203,6 +205,7 @@ void MainWindow::setupWorkspaceEnhancements() {
     setupWelcomeView();
     setupInspectorDock();
     setupComponentsDock();
+    setupCollaborationDock();
     setupAdvancedActions();
 
     m_statusSummaryLabel = new QLabel(this);
@@ -467,6 +470,82 @@ void MainWindow::setupComponentsDock() {
     refreshComponentsPanel();
 }
 
+void MainWindow::setupCollaborationDock() {
+    m_collaborationDock = new QDockWidget(QStringLiteral("联机房间"), this);
+    m_collaborationDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+
+    auto* content = new QWidget(m_collaborationDock);
+    auto* rootLayout = new QVBoxLayout(content);
+    rootLayout->setContentsMargins(8, 8, 8, 8);
+    rootLayout->setSpacing(8);
+
+    auto* formLayout = new QFormLayout();
+    formLayout->setContentsMargins(0, 0, 0, 0);
+    formLayout->setSpacing(6);
+
+    m_collaborationNameEdit = new QLineEdit(content);
+    m_collaborationNameEdit->setText(m_collaborationManager->localDisplayName());
+    m_collaborationHostEdit = new QLineEdit(content);
+    m_collaborationHostEdit->setPlaceholderText(QStringLiteral("例如 192.168.1.23"));
+    m_collaborationPortSpin = new QSpinBox(content);
+    m_collaborationPortSpin->setRange(1024, 65535);
+    m_collaborationPortSpin->setValue(45454);
+    m_collaborationStatusLabel = new QLabel(QStringLiteral("未开房"), content);
+    m_collaborationPeerLabel = new QLabel(QStringLiteral("-"), content);
+
+    formLayout->addRow(QStringLiteral("昵称"), m_collaborationNameEdit);
+    formLayout->addRow(QStringLiteral("房主 IP"), m_collaborationHostEdit);
+    formLayout->addRow(QStringLiteral("房间端口"), m_collaborationPortSpin);
+    formLayout->addRow(QStringLiteral("房间状态"), m_collaborationStatusLabel);
+    formLayout->addRow(QStringLiteral("已连接成员"), m_collaborationPeerLabel);
+
+    auto* buttonsRow = new QWidget(content);
+    auto* buttonsLayout = new QHBoxLayout(buttonsRow);
+    buttonsLayout->setContentsMargins(0, 0, 0, 0);
+    buttonsLayout->setSpacing(6);
+    m_collaborationHostButton = new QPushButton(QStringLiteral("房主开房"), buttonsRow);
+    m_collaborationJoinButton = new QPushButton(QStringLiteral("加入房间"), buttonsRow);
+    m_collaborationDisconnectButton = new QPushButton(QStringLiteral("退出房间"), buttonsRow);
+    buttonsLayout->addWidget(m_collaborationHostButton);
+    buttonsLayout->addWidget(m_collaborationJoinButton);
+    buttonsLayout->addWidget(m_collaborationDisconnectButton);
+
+    auto* hint = new QLabel(
+        QStringLiteral("房主点击“房主开房”后，把自己的局域网 IP 和端口发给其他人。其他人输入房主 IP 和端口后即可直连加入。当前版本使用最后写入覆盖策略同步整张文档，适合局域网或可直连环境。"),
+        content);
+    hint->setWordWrap(true);
+    hint->setStyleSheet(QStringLiteral("color: #666;"));
+
+    m_collaborationLogEdit = new QPlainTextEdit(content);
+    m_collaborationLogEdit->setReadOnly(true);
+    m_collaborationLogEdit->setPlaceholderText(QStringLiteral("房间日志"));
+    m_collaborationLogEdit->document()->setMaximumBlockCount(200);
+
+    rootLayout->addLayout(formLayout);
+    rootLayout->addWidget(buttonsRow);
+    rootLayout->addWidget(hint);
+    rootLayout->addWidget(m_collaborationLogEdit, 1);
+
+    m_collaborationDock->setWidget(content);
+    addDockWidget(Qt::RightDockWidgetArea, m_collaborationDock);
+    if (m_componentsDock) {
+        tabifyDockWidget(m_componentsDock, m_collaborationDock);
+    } else if (m_inspectorDock) {
+        tabifyDockWidget(m_inspectorDock, m_collaborationDock);
+    }
+
+    connect(m_collaborationHostButton, &QPushButton::clicked, this, [this]() { startHostingCollaboration(); });
+    connect(m_collaborationJoinButton, &QPushButton::clicked, this, [this]() { joinPeerCollaboration(); });
+    connect(m_collaborationDisconnectButton, &QPushButton::clicked, this, [this]() { disconnectCollaboration(); });
+    connect(m_collaborationNameEdit, &QLineEdit::editingFinished, this, [this]() {
+        if (m_collaborationManager) {
+            m_collaborationManager->setLocalDisplayName(m_collaborationNameEdit->text());
+        }
+    });
+
+    updateCollaborationUi();
+}
+
 void MainWindow::setupAdvancedActions() {
     auto* toolsMenu = menuBar()->addMenu(QStringLiteral("工具"));
     m_recentFilesMenu = new QMenu(QStringLiteral("最近文件"), this);
@@ -497,6 +576,10 @@ void MainWindow::setupAdvancedActions() {
     if (m_componentsDock) {
         m_componentsDock->toggleViewAction()->setText(QStringLiteral("组件管理"));
         toolsMenu->addAction(m_componentsDock->toggleViewAction());
+    }
+    if (m_collaborationDock) {
+        m_collaborationDock->toggleViewAction()->setText(QStringLiteral("联机房间"));
+        toolsMenu->addAction(m_collaborationDock->toggleViewAction());
     }
     toolsMenu->addSeparator();
     toolsMenu->addAction(m_importComponentsAction);
@@ -612,6 +695,7 @@ void MainWindow::updateDocumentAvailability() {
         m_componentsDock->setEnabled(true);
     }
     updateConnectorActions();
+    updateCollaborationUi();
 }
 
 void MainWindow::updateInspector() {
@@ -691,10 +775,17 @@ void MainWindow::updateInspector() {
 }
 
 void MainWindow::updateStatusSummary() {
+    const QString collaborationState = m_collaborationManager
+        ? m_collaborationManager->statusText()
+        : QStringLiteral("未连接");
+
     if (!m_hasActiveDocument) {
         const int recentCount = flowchart::SessionPersistence::recentFiles().size();
         if (m_statusSummaryLabel) {
-            m_statusSummaryLabel->setText(QStringLiteral("未打开文档 | 最近文件 %1").arg(recentCount));
+            m_statusSummaryLabel->setText(
+                QStringLiteral("未打开文档 | 最近文件 %1 | 协同 %2")
+                    .arg(recentCount)
+                    .arg(collaborationState));
         }
         return;
     }
@@ -716,12 +807,13 @@ void MainWindow::updateStatusSummary() {
 
     if (m_statusSummaryLabel) {
         m_statusSummaryLabel->setText(QStringLiteral(
-            "节点 %1 | 连线 %2 | 选中 %3 | 网格吸附 %4 | %5")
+            "节点 %1 | 连线 %2 | 选中 %3 | 网格吸附 %4 | %5 | 协同 %6")
                 .arg(nodeCount)
                 .arg(connectorCount)
                 .arg(m_session->selectedItemIds().size())
                 .arg(m_session->snapToGridEnabled() ? QStringLiteral("开") : QStringLiteral("关"))
-                .arg(validationState));
+                .arg(validationState)
+                .arg(collaborationState));
     }
 }
 
@@ -801,6 +893,42 @@ void MainWindow::updateConnectorActions() {
             : selectedLineStyle == QStringLiteral("dash") ? 1
             : 2);
     m_syncingConnectorControls = false;
+}
+
+void MainWindow::updateCollaborationUi() {
+    if (!m_collaborationManager || !m_collaborationStatusLabel) {
+        return;
+    }
+
+    const bool connected = m_collaborationManager->isConnected();
+    const bool connecting = m_collaborationManager->isConnecting();
+    const bool hosting = m_collaborationManager->isHosting();
+
+    m_collaborationStatusLabel->setText(m_collaborationManager->statusText());
+    m_collaborationPeerLabel->setText(m_collaborationManager->remoteDisplayName());
+
+    if (m_collaborationNameEdit && m_collaborationNameEdit->text().trimmed() != m_collaborationManager->localDisplayName()) {
+        m_collaborationNameEdit->setText(m_collaborationManager->localDisplayName());
+    }
+
+    if (m_collaborationPortSpin) {
+        if (hosting && !connected && !connecting && m_collaborationManager->listeningPort() > 0) {
+            m_collaborationPortSpin->setValue(m_collaborationManager->listeningPort());
+        }
+        m_collaborationPortSpin->setEnabled(!connected && !connecting && !hosting);
+    }
+    if (m_collaborationHostEdit) {
+        m_collaborationHostEdit->setEnabled(!connected && !connecting && !hosting);
+    }
+    if (m_collaborationHostButton) {
+        m_collaborationHostButton->setEnabled(!connected && !connecting && !hosting);
+    }
+    if (m_collaborationJoinButton) {
+        m_collaborationJoinButton->setEnabled(!connected && !connecting && !hosting);
+    }
+    if (m_collaborationDisconnectButton) {
+        m_collaborationDisconnectButton->setEnabled(connected || connecting || hosting);
+    }
 }
 
 void MainWindow::refreshComponentsPanel(const QString& selectedTypeId) {
@@ -922,6 +1050,22 @@ void MainWindow::bindUi() {
         updateInspector();
         updateStatusSummary();
         updateConnectorActions();
+    });
+    connect(m_collaborationManager, &flowchart::PeerCollaborationManager::stateChanged, this, [this]() {
+        updateCollaborationUi();
+        updateStatusSummary();
+    });
+    connect(m_collaborationManager, &flowchart::PeerCollaborationManager::logMessage, this, [this](const QString& message) {
+        if (m_collaborationLogEdit) {
+            m_collaborationLogEdit->appendPlainText(message);
+        }
+        statusBar()->showMessage(message, 5000);
+    });
+    connect(m_collaborationManager, &flowchart::PeerCollaborationManager::remoteSnapshotApplied, this, [this]() {
+        m_currentFile.clear();
+        m_hasActiveDocument = true;
+        updateDocumentAvailability();
+        updateWindowTitle();
     });
 
     connect(ui->fontComboBox, &QFontComboBox::currentFontChanged, this, [this](const QFont& font) {
@@ -1426,6 +1570,51 @@ void MainWindow::persistRecoverySnapshot() {
     }
 }
 
+void MainWindow::startHostingCollaboration() {
+    if (!m_collaborationManager || !m_collaborationPortSpin) {
+        return;
+    }
+    m_collaborationManager->setLocalDisplayName(
+        m_collaborationNameEdit ? m_collaborationNameEdit->text() : QString());
+
+    QString error;
+    if (!m_collaborationManager->startHosting(static_cast<quint16>(m_collaborationPortSpin->value()), &error)) {
+        QMessageBox::critical(this, QStringLiteral("开房失败"), error);
+        return;
+    }
+    updateCollaborationUi();
+}
+
+void MainWindow::joinPeerCollaboration() {
+    if (!m_collaborationManager || !m_collaborationPortSpin || !m_collaborationHostEdit) {
+        return;
+    }
+    if (!maybeSave()) {
+        return;
+    }
+
+    m_collaborationManager->setLocalDisplayName(
+        m_collaborationNameEdit ? m_collaborationNameEdit->text() : QString());
+
+    QString error;
+    if (!m_collaborationManager->joinPeer(
+            m_collaborationHostEdit->text(),
+            static_cast<quint16>(m_collaborationPortSpin->value()),
+            &error)) {
+        QMessageBox::critical(this, QStringLiteral("加入房间失败"), error);
+        return;
+    }
+    updateCollaborationUi();
+}
+
+void MainWindow::disconnectCollaboration() {
+    if (!m_collaborationManager) {
+        return;
+    }
+    m_collaborationManager->disconnectSession();
+    updateCollaborationUi();
+}
+
 void MainWindow::discardRecoverySnapshot() {
     flowchart::SessionPersistence::discardRecoverySnapshot();
 }
@@ -1480,6 +1669,9 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         return;
     }
 
+    if (m_collaborationManager) {
+        m_collaborationManager->disconnectSession();
+    }
     discardRecoverySnapshot();
     event->accept();
 }

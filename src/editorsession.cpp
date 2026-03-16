@@ -122,6 +122,11 @@ void EditorSession::restoreRecoveredDocument(std::vector<std::unique_ptr<Diagram
     markDirty();
 }
 
+void EditorSession::applyRemoteSnapshot(std::vector<std::unique_ptr<DiagramItemModel>> items) {
+    resetDocumentInternal(std::move(items));
+    markDirty();
+}
+
 bool EditorSession::loadFromFile(const QString& fileName, QString* errorMessage) {
     QString localError;
     auto items = DocumentSerializer::load(fileName, &localError);

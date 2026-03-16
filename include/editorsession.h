@@ -47,6 +47,7 @@ public:
 
     void resetDocument();
     void restoreRecoveredDocument(std::vector<std::unique_ptr<DiagramItemModel>> items);
+    void applyRemoteSnapshot(std::vector<std::unique_ptr<DiagramItemModel>> items);
     bool loadFromFile(const QString& fileName, QString* errorMessage);
     bool saveToFile(const QString& fileName, QString* errorMessage) const;
     bool reloadShapeRegistry(QStringList* warnings = nullptr);
