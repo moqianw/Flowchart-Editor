@@ -49,8 +49,15 @@ public:
     void restoreRecoveredDocument(std::vector<std::unique_ptr<DiagramItemModel>> items);
     bool loadFromFile(const QString& fileName, QString* errorMessage);
     bool saveToFile(const QString& fileName, QString* errorMessage) const;
+    bool reloadShapeRegistry(QStringList* warnings = nullptr);
 
     void createItem(const QString& typeId, const QPointF& scenePos);
+    void createConnector(const QPointF& scenePos);
+    void resetSelectedConnectorBends();
+    void routeSelectedConnectorsVertical();
+    void routeSelectedConnectorsHorizontal();
+    void setSelectedConnectorHeadStyle(const QString& headStyle);
+    void setSelectedConnectorLineStyle(const QString& lineStyle);
     void deleteSelected();
     void copySelected();
     void cutSelected();

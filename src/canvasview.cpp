@@ -137,6 +137,11 @@ void CanvasView::dropEvent(QDropEvent* event) {
 
 void CanvasView::contextMenuEvent(QContextMenuEvent* event) {
     QMenu menu(this);
+    QAction* insertConnectorAction = menu.addAction(QStringLiteral("插入连接线"));
+    connect(insertConnectorAction, &QAction::triggered, this, [this, event]() {
+        m_session->createConnector(mapToScene(event->pos()));
+    });
+    menu.addSeparator();
     auto* checkBox = new QCheckBox(QStringLiteral("显示网格线"), &menu);
     checkBox->setChecked(m_drawGrid);
     connect(checkBox, &QCheckBox::toggled, this, [this](bool checked) {

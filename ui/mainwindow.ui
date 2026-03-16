@@ -621,6 +621,190 @@
        </layout>
       </item>
       <item>
+       <widget class="QFrame" name="connectorBarFrame">
+        <property name="styleSheet">
+         <string notr="true">QFrame#connectorBarFrame{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #f7f1e3, stop:1 #efe6d6);border:1px solid #d8cdb8;border-radius:10px;} QToolButton#connectorInsertButton,QToolButton#connectorAutoButton,QToolButton#connectorVerticalButton,QToolButton#connectorHorizontalButton{background:#fffaf1;border:1px solid #d5c7ae;border-radius:7px;padding:4px 10px;color:#5a4630;} QToolButton#connectorInsertButton:hover,QToolButton#connectorAutoButton:hover,QToolButton#connectorVerticalButton:hover,QToolButton#connectorHorizontalButton:hover{background:#f2e6cf;} QComboBox#connectorHeadCombo,QComboBox#connectorPatternCombo{background:#fffdf8;border:1px solid #d5c7ae;border-radius:7px;padding:3px 8px;color:#5a4630;}</string>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::NoFrame</enum>
+        </property>
+        <layout class="QHBoxLayout" name="horizontalLayout_connectorBar">
+         <property name="spacing">
+          <number>6</number>
+         </property>
+         <property name="leftMargin">
+          <number>8</number>
+         </property>
+         <property name="topMargin">
+          <number>6</number>
+         </property>
+         <property name="rightMargin">
+          <number>8</number>
+         </property>
+         <property name="bottomMargin">
+          <number>6</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="connectorBarLabel">
+           <property name="styleSheet">
+            <string notr="true">color:#6a543c;font-weight:600;padding-right:4px;</string>
+           </property>
+           <property name="text">
+            <string>连接线</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QToolButton" name="connectorInsertButton">
+           <property name="minimumSize">
+            <size>
+             <width>74</width>
+             <height>30</height>
+            </size>
+           </property>
+           <property name="icon">
+            <iconset resource="img.qrc">
+             <normaloff>:/image/Allowline.png</normaloff>:/image/Allowline.png</iconset>
+           </property>
+           <property name="toolButtonStyle">
+            <enum>Qt::ToolButtonTextBesideIcon</enum>
+           </property>
+           <property name="text">
+            <string>插入</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QToolButton" name="connectorAutoButton">
+           <property name="minimumSize">
+            <size>
+             <width>56</width>
+             <height>30</height>
+            </size>
+           </property>
+           <property name="text">
+            <string>自动</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QToolButton" name="connectorVerticalButton">
+           <property name="minimumSize">
+            <size>
+             <width>56</width>
+             <height>30</height>
+            </size>
+           </property>
+           <property name="text">
+            <string>竖折</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QToolButton" name="connectorHorizontalButton">
+           <property name="minimumSize">
+            <size>
+             <width>56</width>
+             <height>30</height>
+            </size>
+           </property>
+           <property name="text">
+            <string>横折</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="connectorHeadLabel">
+           <property name="styleSheet">
+            <string notr="true">color:#6a543c;padding-left:4px;</string>
+           </property>
+           <property name="text">
+            <string>箭头</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="connectorHeadCombo">
+           <property name="minimumSize">
+            <size>
+             <width>84</width>
+             <height>30</height>
+            </size>
+           </property>
+           <item>
+            <property name="text">
+             <string>经典</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>隐锋</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>菱形</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>圆点</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="connectorPatternLabel">
+           <property name="styleSheet">
+            <string notr="true">color:#6a543c;padding-left:4px;</string>
+           </property>
+           <property name="text">
+            <string>线型</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="connectorPatternCombo">
+           <property name="minimumSize">
+            <size>
+             <width>84</width>
+             <height>30</height>
+            </size>
+           </property>
+           <item>
+            <property name="text">
+             <string>实线</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>虚线</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>点线</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_connectorBar">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
        <layout class="QHBoxLayout" name="horizontalLayout_5">
         <item>
          <widget class="QToolBox" name="toolBox">

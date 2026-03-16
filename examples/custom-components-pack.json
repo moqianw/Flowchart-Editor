@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "components": [
+    {
+      "typeId": "CustomHexagonNode",
+      "paletteLabel": "六边形节点",
+      "defaultSize": {
+        "w": 160,
+        "h": 100
+      },
+      "drawSpec": {
+        "commands": [
+          {
+            "op": "polygon",
+            "points": [
+              { "x": 0.25, "y": 0.0 },
+              { "x": 0.75, "y": 0.0 },
+              { "x": 1.0, "y": 0.5 },
+              { "x": 0.75, "y": 1.0 },
+              { "x": 0.25, "y": 1.0 },
+              { "x": 0.0, "y": 0.5 }
+            ]
+          }
+        ]
+      },
+      "ports": {
+        "kind": "fourWay"
+      },
+      "style": {
+        "strokeWidth": 2,
+        "strokeColor": {
+          "r": 29,
+          "g": 58,
+          "b": 84,
+          "a": 255
+        },
+        "fillColor": {
+          "r": 176,
+          "g": 220,
+          "b": 255,
+          "a": 180
+        }
+      }
+    },
+    {
+      "typeId": "CustomDocumentStage",
+      "paletteLabel": "阶段文档",
+      "defaultSize": {
+        "w": 180,
+        "h": 110
+      },
+      "drawSpec": {
+        "commands": [
+          { "op": "moveTo", "x": 0.0, "y": 0.82 },
+          { "op": "lineTo", "x": 0.0, "y": 0.0 },
+          { "op": "lineTo", "x": 1.0, "y": 0.0 },
+          { "op": "lineTo", "x": 1.0, "y": 0.82 },
+          { "op": "arcTo", "x": 0.0, "y": 0.64, "w": 0.5, "h": 0.36, "start": 180, "sweep": 180 },
+          { "op": "arcTo", "x": 0.5, "y": 0.64, "w": 0.5, "h": 0.36, "start": 0, "sweep": 180 }
+        ]
+      },
+      "ports": {
+        "kind": "twoVertical"
+      },
+      "style": {
+        "strokeWidth": 2,
+        "strokeColor": {
+          "r": 97,
+          "g": 62,
+          "b": 32,
+          "a": 255
+        },
+        "fillColor": {
+          "r": 255,
+          "g": 239,
+          "b": 188,
+          "a": 220
+        }
+      }
+    }
+  ]
+}

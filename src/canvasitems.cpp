@@ -33,13 +33,11 @@ void appendSegmentPoint(QVector<QPointF>& segments, const QPointF& point) {
     segments.push_back(point);
 }
 
-QPainterPath arrowPath(
+QVector<QPointF> connectorSegments(
     const QPointF& start,
     const QPointF& end,
-    qreal penWidth,
     const std::optional<qreal>& bendX = std::nullopt,
     const std::optional<qreal>& bendY = std::nullopt) {
-    QPainterPath path;
     QVector<QPointF> segments;
     segments.push_back(start);
 
@@ -62,24 +60,90 @@ QPainterPath arrowPath(
         appendSegmentPoint(segments, end);
     }
 
+    return segments;
+}
+
+QPainterPath polylinePath(const QVector<QPointF>& segments) {
+    QPainterPath path;
+    if (segments.isEmpty()) {
+        return path;
+    }
+
     path.moveTo(segments.front());
     for (int index = 1; index < segments.size(); ++index) {
         path.lineTo(segments[index]);
     }
+    return path;
+}
 
-    const QPointF arrowBase = segments.size() >= 2 ? segments[segments.size() - 2] : start;
+QString connectorHeadStyle(const QJsonObject& props) {
+    return props.value(QStringLiteral("headStyle")).toString(QStringLiteral("stealth"));
+}
+
+QString connectorLineStyle(const QJsonObject& props) {
+    return props.value(QStringLiteral("lineStyle")).toString(QStringLiteral("solid"));
+}
+
+Qt::PenStyle penStyleForConnector(const QString& lineStyle) {
+    if (lineStyle == QStringLiteral("dash")) {
+        return Qt::DashLine;
+    }
+    if (lineStyle == QStringLiteral("dot")) {
+        return Qt::DotLine;
+    }
+    return Qt::SolidLine;
+}
+
+QPainterPath connectorHeadPath(
+    const QPointF& arrowBase,
+    const QPointF& end,
+    qreal penWidth,
+    const QString& headStyle) {
+    QPainterPath path;
+    if (QLineF(arrowBase, end).length() < 0.5) {
+        return path;
+    }
+
     const qreal angle = std::atan2(end.y() - arrowBase.y(), end.x() - arrowBase.x());
-    const qreal arrowSize = std::max<qreal>(penWidth * 3.0, 8.0);
-    const QPointF arrowP1 = end - QPointF(
-        arrowSize * std::cos(angle + kPi / 6.0),
-        arrowSize * std::sin(angle + kPi / 6.0));
-    const QPointF arrowP2 = end - QPointF(
-        arrowSize * std::cos(angle - kPi / 6.0),
-        arrowSize * std::sin(angle - kPi / 6.0));
+    const QPointF direction(std::cos(angle), std::sin(angle));
+    const QPointF normal(-direction.y(), direction.x());
+    const qreal arrowSize = std::max<qreal>(penWidth * 3.6, 11.0);
 
+    if (headStyle == QStringLiteral("diamond")) {
+        const QPointF mid = end - direction * (arrowSize * 0.55);
+        const QPointF rear = end - direction * (arrowSize * 1.1);
+        path.moveTo(end);
+        path.lineTo(mid + normal * (arrowSize * 0.45));
+        path.lineTo(rear);
+        path.lineTo(mid - normal * (arrowSize * 0.45));
+        path.closeSubpath();
+        return path;
+    }
+    if (headStyle == QStringLiteral("circle")) {
+        const qreal radius = std::max<qreal>(penWidth * 1.35, 4.5);
+        path.addEllipse(end, radius, radius);
+        return path;
+    }
+    if (headStyle == QStringLiteral("classic")) {
+        const QPointF arrowP1 = end - QPointF(
+            arrowSize * std::cos(angle + kPi / 6.0),
+            arrowSize * std::sin(angle + kPi / 6.0));
+        const QPointF arrowP2 = end - QPointF(
+            arrowSize * std::cos(angle - kPi / 6.0),
+            arrowSize * std::sin(angle - kPi / 6.0));
+        path.moveTo(end);
+        path.lineTo(arrowP1);
+        path.lineTo(arrowP2);
+        path.closeSubpath();
+        return path;
+    }
+
+    const QPointF rear = end - direction * (arrowSize * 1.05);
+    const QPointF inner = end - direction * (arrowSize * 0.45);
     path.moveTo(end);
-    path.lineTo(arrowP1);
-    path.lineTo(arrowP2);
+    path.lineTo(rear + normal * (arrowSize * 0.48));
+    path.lineTo(inner);
+    path.lineTo(rear - normal * (arrowSize * 0.48));
     path.closeSubpath();
     return path;
 }
@@ -143,7 +207,7 @@ void CanvasNodeItem::syncFromModel() {
     setRotation(model->style.rotation);
     setScale(model->style.scale);
 
-    m_path = m_definition->buildPath(m_localRect, model->props);
+    m_path = buildShapePath(*m_definition, m_localRect, model->props);
 
     QFont font = model->style.font;
     font.setBold(model->style.bold);
@@ -164,7 +228,7 @@ QVector<QPointF> CanvasNodeItem::scenePorts() const {
         return ports;
     }
 
-    const QVector<QPointF> localPorts = m_definition->buildPorts(m_localRect, model->props);
+    const QVector<QPointF> localPorts = buildShapePorts(*m_definition, m_localRect, model->props);
     ports.reserve(localPorts.size());
     for (const QPointF& port : localPorts) {
         ports.push_back(mapToScene(port));
@@ -462,22 +526,55 @@ void CanvasConnectorItem::paint(QPainter* painter, const QStyleOptionGraphicsIte
         return;
     }
 
-    QPen pen(model->style.strokeColor);
+    const QString headStyle = connectorHeadStyle(model->props);
+    const QString lineStyle = connectorLineStyle(model->props);
+    const QColor strokeColor = model->style.strokeColor;
+
+    QPen pen(strokeColor);
     pen.setWidth(model->style.strokeWidth);
     pen.setCosmetic(true);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    pen.setStyle(penStyleForConnector(lineStyle));
+    if (lineStyle == QStringLiteral("dash")) {
+        pen.setDashPattern({6.0, 4.0});
+    } else if (lineStyle == QStringLiteral("dot")) {
+        pen.setDashPattern({1.0, 4.0});
+    }
+
+    if (isSelected()) {
+        QPen glowPen(QColor(64, 132, 255, 90));
+        glowPen.setWidth(model->style.strokeWidth + 6);
+        glowPen.setCosmetic(true);
+        glowPen.setCapStyle(Qt::RoundCap);
+        glowPen.setJoinStyle(Qt::RoundJoin);
+        painter->setPen(glowPen);
+        painter->setBrush(QColor(64, 132, 255, 70));
+        painter->drawPath(m_linePath);
+        painter->fillPath(m_headPath, QColor(64, 132, 255, 90));
+    }
+
     painter->setPen(pen);
-    painter->setBrush(model->style.fillColor);
-    painter->drawPath(m_path);
+    painter->setBrush(Qt::NoBrush);
+    painter->drawPath(m_linePath);
+
+    QColor headFill = strokeColor;
+    if (headStyle == QStringLiteral("circle")) {
+        headFill = model->style.fillColor.alpha() > 0 ? model->style.fillColor : strokeColor;
+    }
+    painter->setBrush(headFill);
+    painter->drawPath(m_headPath);
 
     if (!isSelected()) {
         return;
     }
 
+    painter->setPen(QPen(QColor(64, 132, 255), 1));
     painter->setBrush(QColor(255, 255, 255));
     painter->drawEllipse(handleRect(m_startPoint));
     painter->drawEllipse(handleRect(m_endPoint));
     if (m_hasBendHandle) {
-        painter->setBrush(QColor(55, 126, 255));
+        painter->setBrush(QColor(64, 132, 255));
         painter->drawEllipse(handleRect(m_bendHandlePoint));
     }
 }
@@ -622,7 +719,16 @@ void CanvasConnectorItem::rebuildPath() {
     if (!m_hasBendHandle) {
         m_bendHandlePoint = QPointF();
     }
-    m_path = arrowPath(m_startPoint, m_endPoint, model->style.strokeWidth, bendX, bendY);
+
+    const QVector<QPointF> segments = connectorSegments(m_startPoint, m_endPoint, bendX, bendY);
+    m_linePath = polylinePath(segments);
+    const QPointF arrowBase = segments.size() >= 2 ? segments[segments.size() - 2] : m_startPoint;
+    m_headPath = connectorHeadPath(
+        arrowBase,
+        m_endPoint,
+        model->style.strokeWidth,
+        connectorHeadStyle(model->props));
+    m_path = m_linePath.united(m_headPath);
 }
 
 }  // namespace flowchart

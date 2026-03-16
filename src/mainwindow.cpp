@@ -2,6 +2,8 @@
 
 #include "ui_mainwindow.h"
 
+#include "componentextensionmanager.h"
+#include "customcomponentdialog.h"
 #include "palettebutton.h"
 #include "mermaidexporter.h"
 #include "sessionpersistence.h"
@@ -9,17 +11,25 @@
 #include <QAbstractSpinBox>
 #include <QAction>
 #include <QCheckBox>
+#include <QDesktopServices>
+#include <QFile>
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
+#include <QHBoxLayout>
+#include <QJsonDocument>
 #include <QKeySequence>
 #include <QListWidgetItem>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QPlainTextEdit>
 #include <QScrollArea>
+#include <QSignalBlocker>
+#include <QSplitter>
 #include <QStatusBar>
 #include <QToolButton>
+#include <QUrl>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -162,9 +172,12 @@ void MainWindow::populatePalette() {
         ui->formLayout->addRow(scrollArea);
     }
 
+    qDeleteAll(m_paletteButtons);
+    m_paletteButtons.clear();
+
     for (const flowchart::ShapeDefinition* definition : m_session->registry().paletteDefinitions()) {
         auto* button = new flowchart::PaletteButton(definition->typeId, definition->paletteLabel, this);
-        button->setIcon(QIcon(definition->iconPath));
+        button->setIcon(definition->paletteIcon.isNull() ? QIcon(definition->iconPath) : definition->paletteIcon);
         button->setIconSize(QSize(36, 36));
         button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         button->setStyleSheet(QStringLiteral("text-align: left; padding: 6px 8px;"));
@@ -181,9 +194,15 @@ void MainWindow::populatePalette() {
     }
 }
 
+void MainWindow::refreshPalette() {
+    populatePalette();
+    updateDocumentAvailability();
+}
+
 void MainWindow::setupWorkspaceEnhancements() {
     setupWelcomeView();
     setupInspectorDock();
+    setupComponentsDock();
     setupAdvancedActions();
 
     m_statusSummaryLabel = new QLabel(this);
@@ -349,9 +368,109 @@ void MainWindow::setupInspectorDock() {
     });
 }
 
+void MainWindow::setupComponentsDock() {
+    m_componentsDock = new QDockWidget(QStringLiteral("组件管理"), this);
+    m_componentsDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+
+    auto* content = new QWidget(m_componentsDock);
+    auto* rootLayout = new QVBoxLayout(content);
+    rootLayout->setContentsMargins(8, 8, 8, 8);
+    rootLayout->setSpacing(8);
+
+    auto* topButtonsRow = new QWidget(content);
+    auto* topButtonsLayout = new QHBoxLayout(topButtonsRow);
+    topButtonsLayout->setContentsMargins(0, 0, 0, 0);
+    topButtonsLayout->setSpacing(6);
+
+    auto* newButton = new QPushButton(QStringLiteral("新建"), topButtonsRow);
+    auto* importButton = new QPushButton(QStringLiteral("导入"), topButtonsRow);
+    auto* refreshButton = new QPushButton(QStringLiteral("刷新"), topButtonsRow);
+    auto* openDirButton = new QPushButton(QStringLiteral("目录"), topButtonsRow);
+    topButtonsLayout->addWidget(newButton);
+    topButtonsLayout->addWidget(importButton);
+    topButtonsLayout->addWidget(refreshButton);
+    topButtonsLayout->addWidget(openDirButton);
+
+    auto* splitter = new QSplitter(Qt::Vertical, content);
+    m_componentsList = new QListWidget(splitter);
+    m_componentsList->setAlternatingRowColors(true);
+    m_componentsList->setUniformItemSizes(true);
+
+    auto* editorPane = new QWidget(splitter);
+    auto* editorLayout = new QVBoxLayout(editorPane);
+    editorLayout->setContentsMargins(0, 0, 0, 0);
+    editorLayout->setSpacing(6);
+
+    auto* detailsLayout = new QFormLayout();
+    detailsLayout->setContentsMargins(0, 0, 0, 0);
+    detailsLayout->setSpacing(6);
+    m_componentTypeValueLabel = new QLabel(QStringLiteral("-"), editorPane);
+    m_componentLabelValueLabel = new QLabel(QStringLiteral("-"), editorPane);
+    m_componentFileValueLabel = new QLabel(QStringLiteral("-"), editorPane);
+    m_componentFileValueLabel->setWordWrap(true);
+    detailsLayout->addRow(QStringLiteral("类型"), m_componentTypeValueLabel);
+    detailsLayout->addRow(QStringLiteral("名称"), m_componentLabelValueLabel);
+    detailsLayout->addRow(QStringLiteral("文件"), m_componentFileValueLabel);
+
+    auto* editorHint = new QLabel(
+        QStringLiteral("直接编辑组件定义 JSON。保存后会自动刷新图形栏和注册表。"),
+        editorPane);
+    editorHint->setWordWrap(true);
+    editorHint->setStyleSheet(QStringLiteral("color: #666;"));
+
+    m_componentJsonEdit = new QPlainTextEdit(editorPane);
+    m_componentJsonEdit->setPlaceholderText(QStringLiteral("{\n  \"typeId\": \"CustomNode\",\n  \"paletteLabel\": \"自定义节点\",\n  ...\n}"));
+
+    auto* bottomButtonsRow = new QWidget(editorPane);
+    auto* bottomButtonsLayout = new QHBoxLayout(bottomButtonsRow);
+    bottomButtonsLayout->setContentsMargins(0, 0, 0, 0);
+    bottomButtonsLayout->setSpacing(6);
+    m_componentSaveButton = new QPushButton(QStringLiteral("保存修改"), bottomButtonsRow);
+    m_componentExportButton = new QPushButton(QStringLiteral("导出"), bottomButtonsRow);
+    m_componentDeleteButton = new QPushButton(QStringLiteral("删除"), bottomButtonsRow);
+    bottomButtonsLayout->addWidget(m_componentSaveButton);
+    bottomButtonsLayout->addWidget(m_componentExportButton);
+    bottomButtonsLayout->addWidget(m_componentDeleteButton);
+    bottomButtonsLayout->addStretch(1);
+
+    editorLayout->addLayout(detailsLayout);
+    editorLayout->addWidget(editorHint);
+    editorLayout->addWidget(m_componentJsonEdit, 1);
+    editorLayout->addWidget(bottomButtonsRow);
+
+    splitter->addWidget(m_componentsList);
+    splitter->addWidget(editorPane);
+    splitter->setStretchFactor(0, 0);
+    splitter->setStretchFactor(1, 1);
+
+    rootLayout->addWidget(topButtonsRow);
+    rootLayout->addWidget(splitter, 1);
+
+    m_componentsDock->setWidget(content);
+    addDockWidget(Qt::RightDockWidgetArea, m_componentsDock);
+    if (m_inspectorDock) {
+        tabifyDockWidget(m_inspectorDock, m_componentsDock);
+        m_inspectorDock->raise();
+    }
+
+    connect(newButton, &QPushButton::clicked, this, [this]() { createCustomComponent(); });
+    connect(importButton, &QPushButton::clicked, this, [this]() { importComponentPack(); });
+    connect(refreshButton, &QPushButton::clicked, this, [this]() { refreshComponentsPanel(); });
+    connect(openDirButton, &QPushButton::clicked, this, [this]() { openComponentsDirectory(); });
+    connect(m_componentsList, &QListWidget::currentItemChanged, this, [this](QListWidgetItem*, QListWidgetItem*) {
+        updateManagedComponentDetails();
+    });
+    connect(m_componentSaveButton, &QPushButton::clicked, this, [this]() { saveManagedComponentChanges(); });
+    connect(m_componentExportButton, &QPushButton::clicked, this, [this]() { exportManagedComponent(); });
+    connect(m_componentDeleteButton, &QPushButton::clicked, this, [this]() { deleteManagedComponent(); });
+
+    refreshComponentsPanel();
+}
+
 void MainWindow::setupAdvancedActions() {
     auto* toolsMenu = menuBar()->addMenu(QStringLiteral("工具"));
     m_recentFilesMenu = new QMenu(QStringLiteral("最近文件"), this);
+    m_connectorMenu = new QMenu(QStringLiteral("连接线"), this);
     m_autoLayoutAction = new QAction(QStringLiteral("自动布局"), this);
     m_autoLayoutAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+L")));
     m_validateAction = new QAction(QStringLiteral("校验流程图"), this);
@@ -360,14 +479,37 @@ void MainWindow::setupAdvancedActions() {
     m_snapToGridAction->setCheckable(true);
     m_snapToGridAction->setChecked(m_session->snapToGridEnabled());
     m_exportMermaidAction = new QAction(QStringLiteral("Mermaid"), this);
+    m_importComponentsAction = new QAction(QStringLiteral("导入组件扩展包"), this);
+    m_createComponentAction = new QAction(QStringLiteral("新建自定义组件"), this);
+    m_openComponentsDirAction = new QAction(QStringLiteral("打开组件目录"), this);
+    m_insertConnectorAction = new QAction(QStringLiteral("插入连接线"), this);
+    m_insertConnectorAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+L")));
+    m_resetConnectorBendAction = new QAction(QStringLiteral("自动路由"), this);
+    m_routeConnectorVerticalAction = new QAction(QStringLiteral("纵向折线"), this);
+    m_routeConnectorHorizontalAction = new QAction(QStringLiteral("横向折线"), this);
 
     ui->menu->insertMenu(ui->action, m_recentFilesMenu);
     ui->menu_4->addAction(m_exportMermaidAction);
     if (m_inspectorDock) {
         m_inspectorDock->toggleViewAction()->setText(QStringLiteral("属性面板"));
         toolsMenu->addAction(m_inspectorDock->toggleViewAction());
-        toolsMenu->addSeparator();
     }
+    if (m_componentsDock) {
+        m_componentsDock->toggleViewAction()->setText(QStringLiteral("组件管理"));
+        toolsMenu->addAction(m_componentsDock->toggleViewAction());
+    }
+    toolsMenu->addSeparator();
+    toolsMenu->addAction(m_importComponentsAction);
+    toolsMenu->addAction(m_createComponentAction);
+    toolsMenu->addAction(m_openComponentsDirAction);
+    toolsMenu->addSeparator();
+    m_connectorMenu->addAction(m_insertConnectorAction);
+    m_connectorMenu->addSeparator();
+    m_connectorMenu->addAction(m_resetConnectorBendAction);
+    m_connectorMenu->addAction(m_routeConnectorVerticalAction);
+    m_connectorMenu->addAction(m_routeConnectorHorizontalAction);
+    toolsMenu->addMenu(m_connectorMenu);
+    toolsMenu->addSeparator();
     toolsMenu->addAction(m_autoLayoutAction);
     toolsMenu->addAction(m_validateAction);
     toolsMenu->addSeparator();
@@ -417,6 +559,13 @@ void MainWindow::updateDocumentAvailability() {
         ui->toolButton_18,
         ui->toolButton_19,
         ui->toolButton_20,
+        ui->connectorBarFrame,
+        ui->connectorInsertButton,
+        ui->connectorAutoButton,
+        ui->connectorVerticalButton,
+        ui->connectorHorizontalButton,
+        ui->connectorHeadCombo,
+        ui->connectorPatternCombo,
     };
     for (QWidget* widget : widgets) {
         if (widget) {
@@ -445,6 +594,10 @@ void MainWindow::updateDocumentAvailability() {
         m_validateAction,
         m_snapToGridAction,
         m_exportMermaidAction,
+        m_insertConnectorAction,
+        m_resetConnectorBendAction,
+        m_routeConnectorVerticalAction,
+        m_routeConnectorHorizontalAction,
     };
     for (QAction* action : actions) {
         if (action) {
@@ -455,6 +608,10 @@ void MainWindow::updateDocumentAvailability() {
     if (m_inspectorDock) {
         m_inspectorDock->setEnabled(m_hasActiveDocument);
     }
+    if (m_componentsDock) {
+        m_componentsDock->setEnabled(true);
+    }
+    updateConnectorActions();
 }
 
 void MainWindow::updateInspector() {
@@ -591,6 +748,164 @@ QString MainWindow::currentSingleSelectedItemId() const {
     return m_session->hasSingleSelection() ? m_session->primarySelectedItemId() : QString();
 }
 
+void MainWindow::updateConnectorActions() {
+    bool hasConnectorSelection = false;
+    for (const QString& itemId : m_session->selectedItemIds()) {
+        if (m_session->document().connector(itemId)) {
+            hasConnectorSelection = true;
+            break;
+        }
+    }
+
+    if (m_resetConnectorBendAction) {
+        m_resetConnectorBendAction->setEnabled(m_hasActiveDocument && hasConnectorSelection);
+    }
+    if (m_routeConnectorVerticalAction) {
+        m_routeConnectorVerticalAction->setEnabled(m_hasActiveDocument && hasConnectorSelection);
+    }
+    if (m_routeConnectorHorizontalAction) {
+        m_routeConnectorHorizontalAction->setEnabled(m_hasActiveDocument && hasConnectorSelection);
+    }
+    if (ui->connectorBarFrame) {
+        ui->connectorBarFrame->setEnabled(m_hasActiveDocument);
+    }
+
+    const bool enableStyleControls = m_hasActiveDocument && hasConnectorSelection;
+    ui->connectorAutoButton->setEnabled(enableStyleControls);
+    ui->connectorVerticalButton->setEnabled(enableStyleControls);
+    ui->connectorHorizontalButton->setEnabled(enableStyleControls);
+    ui->connectorHeadCombo->setEnabled(enableStyleControls);
+    ui->connectorPatternCombo->setEnabled(enableStyleControls);
+    ui->connectorInsertButton->setEnabled(m_hasActiveDocument);
+
+    QString selectedHeadStyle = QStringLiteral("stealth");
+    QString selectedLineStyle = QStringLiteral("solid");
+    for (const QString& itemId : m_session->selectedItemIds()) {
+        const auto* connector = m_session->document().connector(itemId);
+        if (!connector) {
+            continue;
+        }
+        selectedHeadStyle = connector->props.value(QStringLiteral("headStyle")).toString(QStringLiteral("stealth"));
+        selectedLineStyle = connector->props.value(QStringLiteral("lineStyle")).toString(QStringLiteral("solid"));
+        break;
+    }
+
+    m_syncingConnectorControls = true;
+    ui->connectorHeadCombo->setCurrentIndex(
+        selectedHeadStyle == QStringLiteral("classic") ? 0
+            : selectedHeadStyle == QStringLiteral("stealth") ? 1
+            : selectedHeadStyle == QStringLiteral("diamond") ? 2
+            : 3);
+    ui->connectorPatternCombo->setCurrentIndex(
+        selectedLineStyle == QStringLiteral("solid") ? 0
+            : selectedLineStyle == QStringLiteral("dash") ? 1
+            : 2);
+    m_syncingConnectorControls = false;
+}
+
+void MainWindow::refreshComponentsPanel(const QString& selectedTypeId) {
+    if (!m_componentsList) {
+        return;
+    }
+
+    QString effectiveSelectedTypeId = selectedTypeId;
+    if (effectiveSelectedTypeId.isEmpty()) {
+        if (const QListWidgetItem* current = m_componentsList->currentItem()) {
+            effectiveSelectedTypeId = current->data(Qt::UserRole + 1).toString();
+        }
+    }
+
+    QStringList warnings;
+    const QVector<flowchart::InstalledComponentEntry> entries =
+        flowchart::ComponentExtensionManager::loadInstalledComponentEntries(&warnings);
+
+    QSignalBlocker blocker(m_componentsList);
+    m_componentsList->clear();
+
+    int selectedRow = -1;
+    for (int index = 0; index < entries.size(); ++index) {
+        const auto& entry = entries[index];
+        auto* item = new QListWidgetItem(
+            QStringLiteral("%1 (%2)").arg(entry.paletteLabel, entry.typeId),
+            m_componentsList);
+        item->setToolTip(entry.filePath);
+        item->setData(Qt::UserRole, entry.filePath);
+        item->setData(Qt::UserRole + 1, entry.typeId);
+        item->setData(Qt::UserRole + 2, entry.definition);
+        if (!effectiveSelectedTypeId.isEmpty() && entry.typeId == effectiveSelectedTypeId) {
+            selectedRow = index;
+        }
+    }
+
+    if (selectedRow < 0 && m_componentsList->count() > 0) {
+        selectedRow = 0;
+    }
+    if (selectedRow >= 0) {
+        m_componentsList->setCurrentRow(selectedRow);
+    }
+
+    updateManagedComponentDetails();
+    if (!warnings.isEmpty()) {
+        statusBar()->showMessage(
+            QStringLiteral("组件加载存在警告：%1").arg(warnings.join(QStringLiteral(" | "))),
+            6000);
+    }
+}
+
+void MainWindow::updateManagedComponentDetails() {
+    const QListWidgetItem* item = m_componentsList ? m_componentsList->currentItem() : nullptr;
+    const bool hasSelection = item != nullptr;
+
+    if (m_componentTypeValueLabel) {
+        m_componentTypeValueLabel->setText(hasSelection ? item->data(Qt::UserRole + 1).toString() : QStringLiteral("-"));
+    }
+
+    if (!hasSelection) {
+        if (m_componentLabelValueLabel) {
+            m_componentLabelValueLabel->setText(QStringLiteral("-"));
+        }
+        if (m_componentFileValueLabel) {
+            m_componentFileValueLabel->setText(QStringLiteral("-"));
+        }
+        if (m_componentJsonEdit) {
+            m_componentJsonEdit->clear();
+            m_componentJsonEdit->setEnabled(false);
+        }
+        if (m_componentSaveButton) {
+            m_componentSaveButton->setEnabled(false);
+        }
+        if (m_componentExportButton) {
+            m_componentExportButton->setEnabled(false);
+        }
+        if (m_componentDeleteButton) {
+            m_componentDeleteButton->setEnabled(false);
+        }
+        return;
+    }
+
+    const QJsonObject definition = item->data(Qt::UserRole + 2).toJsonObject();
+    if (m_componentLabelValueLabel) {
+        m_componentLabelValueLabel->setText(
+            definition.value(QStringLiteral("paletteLabel")).toString(item->data(Qt::UserRole + 1).toString()));
+    }
+    if (m_componentFileValueLabel) {
+        m_componentFileValueLabel->setText(item->data(Qt::UserRole).toString());
+    }
+    if (m_componentJsonEdit) {
+        m_componentJsonEdit->setEnabled(true);
+        m_componentJsonEdit->setPlainText(QString::fromUtf8(QJsonDocument(definition).toJson(QJsonDocument::Indented)));
+    }
+    if (m_componentSaveButton) {
+        m_componentSaveButton->setEnabled(true);
+    }
+    if (m_componentExportButton) {
+        m_componentExportButton->setEnabled(true);
+    }
+    if (m_componentDeleteButton) {
+        m_componentDeleteButton->setEnabled(true);
+    }
+}
+
 void MainWindow::bindUi() {
     connect(m_session, &flowchart::EditorSession::dirtyChanged, this, [this](bool) {
         updateWindowTitle();
@@ -601,10 +916,12 @@ void MainWindow::bindUi() {
     connect(m_session, &flowchart::EditorSession::selectionChanged, this, [this]() {
         updateInspector();
         updateStatusSummary();
+        updateConnectorActions();
     });
     connect(m_session, &flowchart::EditorSession::documentChanged, this, [this]() {
         updateInspector();
         updateStatusSummary();
+        updateConnectorActions();
     });
 
     connect(ui->fontComboBox, &QFontComboBox::currentFontChanged, this, [this](const QFont& font) {
@@ -695,6 +1012,37 @@ void MainWindow::bindUi() {
     connect(ui->toolButton_18, &QToolButton::clicked, this, [this]() { m_session->scaleSelected(1.0 / 1.15); });
     connect(ui->toolButton_19, &QToolButton::clicked, this, [this]() { m_session->rotateSelected(-45.0); });
     connect(ui->toolButton_20, &QToolButton::clicked, this, [this]() { m_session->rotateSelected(45.0); });
+    connect(ui->connectorInsertButton, &QToolButton::clicked, this, [this]() { insertConnector(); });
+    connect(ui->connectorAutoButton, &QToolButton::clicked, this, [this]() { m_session->resetSelectedConnectorBends(); });
+    connect(ui->connectorVerticalButton, &QToolButton::clicked, this, [this]() { m_session->routeSelectedConnectorsVertical(); });
+    connect(ui->connectorHorizontalButton, &QToolButton::clicked, this, [this]() { m_session->routeSelectedConnectorsHorizontal(); });
+    connect(ui->connectorHeadCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (m_syncingConnectorControls || index < 0) {
+            return;
+        }
+        static const QStringList styles = {
+            QStringLiteral("classic"),
+            QStringLiteral("stealth"),
+            QStringLiteral("diamond"),
+            QStringLiteral("circle"),
+        };
+        if (index < styles.size()) {
+            m_session->setSelectedConnectorHeadStyle(styles[index]);
+        }
+    });
+    connect(ui->connectorPatternCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (m_syncingConnectorControls || index < 0) {
+            return;
+        }
+        static const QStringList styles = {
+            QStringLiteral("solid"),
+            QStringLiteral("dash"),
+            QStringLiteral("dot"),
+        };
+        if (index < styles.size()) {
+            m_session->setSelectedConnectorLineStyle(styles[index]);
+        }
+    });
 
     connect(ui->newAction, &QAction::triggered, this, [this]() { startNewDocument(); });
     connect(ui->openAction, &QAction::triggered, this, [this]() { openDocumentDialog(); });
@@ -778,6 +1126,13 @@ void MainWindow::bindUi() {
         m_session->setSnapToGridEnabled(checked);
         updateStatusSummary();
     });
+    connect(m_importComponentsAction, &QAction::triggered, this, [this]() { importComponentPack(); });
+    connect(m_createComponentAction, &QAction::triggered, this, [this]() { createCustomComponent(); });
+    connect(m_openComponentsDirAction, &QAction::triggered, this, [this]() { openComponentsDirectory(); });
+    connect(m_insertConnectorAction, &QAction::triggered, this, [this]() { insertConnector(); });
+    connect(m_resetConnectorBendAction, &QAction::triggered, this, [this]() { m_session->resetSelectedConnectorBends(); });
+    connect(m_routeConnectorVerticalAction, &QAction::triggered, this, [this]() { m_session->routeSelectedConnectorsVertical(); });
+    connect(m_routeConnectorHorizontalAction, &QAction::triggered, this, [this]() { m_session->routeSelectedConnectorsHorizontal(); });
     connect(m_exportMermaidAction, &QAction::triggered, this, [this]() {
         QString fileName = QFileDialog::getSaveFileName(
             this,
@@ -869,6 +1224,195 @@ void MainWindow::openDocumentDialog() {
         return;
     }
     openFromFile(fileName);
+}
+
+void MainWindow::importComponentPack() {
+    const QString fileName = QFileDialog::getOpenFileName(
+        this,
+        QStringLiteral("导入组件扩展包"),
+        QString(),
+        QStringLiteral("JSON (*.json)"));
+    if (fileName.isEmpty()) {
+        return;
+    }
+
+    QString error;
+    QStringList importedTypeIds;
+    if (!flowchart::ComponentExtensionManager::importComponentPack(fileName, &error, &importedTypeIds)) {
+        QMessageBox::critical(this, QStringLiteral("导入失败"), error);
+        return;
+    }
+
+    QStringList warnings;
+    m_session->reloadShapeRegistry(&warnings);
+    refreshPalette();
+    refreshComponentsPanel(importedTypeIds.isEmpty() ? QString() : importedTypeIds.front());
+
+    QString message = QStringLiteral("已导入 %1 个组件。").arg(importedTypeIds.size());
+    if (!warnings.isEmpty()) {
+        message += QStringLiteral("\n\n以下组件存在警告：\n%1").arg(warnings.join(QLatin1Char('\n')));
+    }
+    QMessageBox::information(this, QStringLiteral("导入完成"), message);
+}
+
+void MainWindow::createCustomComponent() {
+    flowchart::CustomComponentDialog dialog(this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    QString error;
+    if (!flowchart::ComponentExtensionManager::saveComponentDefinition(dialog.componentDefinition(), &error)) {
+        QMessageBox::critical(this, QStringLiteral("创建失败"), error);
+        return;
+    }
+
+    QStringList warnings;
+    m_session->reloadShapeRegistry(&warnings);
+    refreshPalette();
+    refreshComponentsPanel(dialog.componentDefinition().value(QStringLiteral("typeId")).toString());
+
+    if (warnings.isEmpty()) {
+        statusBar()->showMessage(QStringLiteral("自定义组件已添加到图形栏。"), 4000);
+        return;
+    }
+    QMessageBox::warning(
+        this,
+        QStringLiteral("组件已保存，但存在警告"),
+        warnings.join(QLatin1Char('\n')));
+}
+
+void MainWindow::openComponentsDirectory() {
+    QDesktopServices::openUrl(QUrl::fromLocalFile(flowchart::ComponentExtensionManager::componentsDirectory()));
+}
+
+void MainWindow::insertConnector() {
+    if (!m_hasActiveDocument) {
+        return;
+    }
+    m_session->createConnector(m_view->sceneCenter());
+}
+
+void MainWindow::saveManagedComponentChanges() {
+    QListWidgetItem* item = m_componentsList ? m_componentsList->currentItem() : nullptr;
+    if (!item || !m_componentJsonEdit) {
+        return;
+    }
+
+    QJsonParseError parseError;
+    const QByteArray bytes = m_componentJsonEdit->toPlainText().trimmed().toUtf8();
+    const QJsonDocument document = QJsonDocument::fromJson(bytes, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        QMessageBox::warning(this, QStringLiteral("JSON 无效"), parseError.errorString());
+        return;
+    }
+
+    const QJsonObject definition = document.object();
+    const QString originalFilePath = item->data(Qt::UserRole).toString();
+    const QString originalTypeId = item->data(Qt::UserRole + 1).toString();
+    const QString newTypeId = definition.value(QStringLiteral("typeId")).toString().trimmed();
+    if (newTypeId.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("保存失败"), QStringLiteral("组件 typeId 不能为空。"));
+        return;
+    }
+
+    const QString targetFilePath = flowchart::ComponentExtensionManager::componentFilePath(newTypeId);
+    if (originalFilePath != targetFilePath && QFileInfo::exists(targetFilePath)) {
+        QMessageBox::warning(this, QStringLiteral("保存失败"), QStringLiteral("目标组件 ID 已存在，请先修改为其他 ID。"));
+        return;
+    }
+
+    QString error;
+    if (!flowchart::ComponentExtensionManager::saveComponentDefinition(definition, &error)) {
+        QMessageBox::critical(this, QStringLiteral("保存失败"), error);
+        return;
+    }
+
+    if (originalTypeId != newTypeId) {
+        flowchart::ComponentExtensionManager::deleteComponentFile(originalFilePath, nullptr);
+    }
+
+    QStringList warnings;
+    m_session->reloadShapeRegistry(&warnings);
+    refreshPalette();
+    refreshComponentsPanel(newTypeId);
+    if (warnings.isEmpty()) {
+        statusBar()->showMessage(QStringLiteral("组件已更新。"), 4000);
+    } else {
+        QMessageBox::warning(this, QStringLiteral("组件已保存，但存在警告"), warnings.join(QLatin1Char('\n')));
+    }
+}
+
+void MainWindow::exportManagedComponent() {
+    const QListWidgetItem* item = m_componentsList ? m_componentsList->currentItem() : nullptr;
+    if (!item) {
+        return;
+    }
+
+    QString fileName = QFileDialog::getSaveFileName(
+        this,
+        QStringLiteral("导出组件定义"),
+        item->data(Qt::UserRole + 1).toString() + QStringLiteral(".json"),
+        QStringLiteral("JSON (*.json)"));
+    if (fileName.isEmpty()) {
+        return;
+    }
+    if (QFileInfo(fileName).suffix().isEmpty()) {
+        fileName += QStringLiteral(".json");
+    }
+
+    QJsonObject definition = item->data(Qt::UserRole + 2).toJsonObject();
+    if (m_componentJsonEdit && !m_componentJsonEdit->toPlainText().trimmed().isEmpty()) {
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(m_componentJsonEdit->toPlainText().trimmed().toUtf8(), &parseError);
+        if (parseError.error == QJsonParseError::NoError && document.isObject()) {
+            definition = document.object();
+        }
+    }
+
+    QString error;
+    if (!flowchart::ComponentExtensionManager::saveComponentDocument(
+            definition,
+            fileName,
+            &error)) {
+        QMessageBox::critical(this, QStringLiteral("导出失败"), error);
+        return;
+    }
+    statusBar()->showMessage(QStringLiteral("组件已导出。"), 4000);
+}
+
+void MainWindow::deleteManagedComponent() {
+    QListWidgetItem* item = m_componentsList ? m_componentsList->currentItem() : nullptr;
+    if (!item) {
+        return;
+    }
+
+    const QString typeId = item->data(Qt::UserRole + 1).toString();
+    const auto result = QMessageBox::warning(
+        this,
+        QStringLiteral("删除组件"),
+        QStringLiteral("确定删除组件 %1 吗？此操作不可撤销。").arg(typeId),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No);
+    if (result != QMessageBox::Yes) {
+        return;
+    }
+
+    QString error;
+    if (!flowchart::ComponentExtensionManager::deleteComponentFile(item->data(Qt::UserRole).toString(), &error)) {
+        QMessageBox::critical(this, QStringLiteral("删除失败"), error);
+        return;
+    }
+
+    QStringList warnings;
+    m_session->reloadShapeRegistry(&warnings);
+    refreshPalette();
+    refreshComponentsPanel();
+    if (warnings.isEmpty()) {
+        statusBar()->showMessage(QStringLiteral("组件已删除。"), 4000);
+    } else {
+        QMessageBox::warning(this, QStringLiteral("组件已删除，但存在警告"), warnings.join(QLatin1Char('\n')));
+    }
 }
 
 void MainWindow::persistRecoverySnapshot() {

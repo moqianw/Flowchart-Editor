@@ -18,6 +18,7 @@
 #include <QStackedWidget>
 #include <QTimer>
 #include <QAction>
+#include <QPlainTextEdit>
 #include <QVBoxLayout>
 
 QT_BEGIN_NAMESPACE
@@ -44,19 +45,31 @@ private:
     void updateWindowTitle();
     void bindUi();
     void populatePalette();
+    void refreshPalette();
     void setupWorkspaceEnhancements();
     void setupWelcomeView();
     void setupInspectorDock();
+    void setupComponentsDock();
     void setupAdvancedActions();
     void setupPersistence();
     void updateDocumentAvailability();
     void updateInspector();
     void updateStatusSummary();
+    void updateConnectorActions();
     void applyInspectorGeometry();
     void updateRecentFilesMenu();
     void updateRecentFilesWelcomeList();
+    void refreshComponentsPanel(const QString& selectedTypeId = QString());
+    void updateManagedComponentDetails();
     void startNewDocument();
     void openDocumentDialog();
+    void importComponentPack();
+    void createCustomComponent();
+    void openComponentsDirectory();
+    void insertConnector();
+    void saveManagedComponentChanges();
+    void exportManagedComponent();
+    void deleteManagedComponent();
     void persistRecoverySnapshot();
     void discardRecoverySnapshot();
     void restoreRecoverySnapshotIfAvailable();
@@ -76,9 +89,18 @@ private:
     QAction* m_validateAction = nullptr;
     QAction* m_snapToGridAction = nullptr;
     QAction* m_exportMermaidAction = nullptr;
+    QAction* m_importComponentsAction = nullptr;
+    QAction* m_createComponentAction = nullptr;
+    QAction* m_openComponentsDirAction = nullptr;
+    QAction* m_insertConnectorAction = nullptr;
+    QAction* m_resetConnectorBendAction = nullptr;
+    QAction* m_routeConnectorVerticalAction = nullptr;
+    QAction* m_routeConnectorHorizontalAction = nullptr;
     QMenu* m_recentFilesMenu = nullptr;
+    QMenu* m_connectorMenu = nullptr;
     QLabel* m_statusSummaryLabel = nullptr;
     QDockWidget* m_inspectorDock = nullptr;
+    QDockWidget* m_componentsDock = nullptr;
     QLabel* m_itemTypeLabel = nullptr;
     QLabel* m_itemIdLabel = nullptr;
     QLineEdit* m_textEdit = nullptr;
@@ -90,8 +112,17 @@ private:
     QDoubleSpinBox* m_scaleSpin = nullptr;
     QSpinBox* m_fillAlphaSpin = nullptr;
     QSpinBox* m_strokeWidthSpin = nullptr;
+    QListWidget* m_componentsList = nullptr;
+    QLabel* m_componentTypeValueLabel = nullptr;
+    QLabel* m_componentLabelValueLabel = nullptr;
+    QLabel* m_componentFileValueLabel = nullptr;
+    QPlainTextEdit* m_componentJsonEdit = nullptr;
+    QPushButton* m_componentSaveButton = nullptr;
+    QPushButton* m_componentExportButton = nullptr;
+    QPushButton* m_componentDeleteButton = nullptr;
     QTimer* m_autoSaveTimer = nullptr;
     bool m_syncingInspector = false;
+    bool m_syncingConnectorControls = false;
     bool m_hasActiveDocument = false;
 };
 #endif // MAINWINDOW_H

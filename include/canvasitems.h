@@ -126,6 +126,8 @@ private:
     bool m_hasBendHandle = false;
     bool m_bendAdjustsX = true;
     QPainterPath m_path;
+    QPainterPath m_linePath;
+    QPainterPath m_headPath;
     bool m_syncing = false;
     EndpointHandle m_activeHandle = EndpointHandle::None;
 };

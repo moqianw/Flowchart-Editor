@@ -1,6 +1,42 @@
 {
     "items": [
         {
+            "id": "a5662c79-1b14-49dc-94df-296496ea6967",
+            "kind": "node",
+            "props": {
+            },
+            "rect": {
+                "h": 100,
+                "w": 100,
+                "x": 1180,
+                "y": 820
+            },
+            "style": {
+                "bold": false,
+                "fillColor": {
+                    "a": 255,
+                    "b": 0,
+                    "g": 0,
+                    "r": 255
+                },
+                "font": "Microsoft YaHei,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1",
+                "italic": false,
+                "rotation": 0,
+                "scale": 1,
+                "strokeColor": {
+                    "a": 255,
+                    "b": 0,
+                    "g": 0,
+                    "r": 0
+                },
+                "strokeWidth": 2,
+                "underline": false
+            },
+            "text": "",
+            "typeId": "Ellipse",
+            "zValue": 1
+        },
+        {
             "id": "f6e95c91-c61a-4334-adbb-ddab971e3033",
             "kind": "node",
             "props": {
@@ -8,8 +44,8 @@
             "rect": {
                 "h": 100,
                 "w": 100,
-                "x": 1100,
-                "y": 740
+                "x": 960,
+                "y": 600
             },
             "style": {
                 "bold": false,
@@ -34,6 +70,148 @@
             },
             "text": "",
             "typeId": "Ellipse",
+            "zValue": 1
+        },
+        {
+            "end": {
+                "itemId": "",
+                "portIndex": -1,
+                "position": {
+                    "x": 1460,
+                    "y": 1120
+                }
+            },
+            "id": "888312cc-e495-44c9-ad99-dd744bb20278",
+            "kind": "connector",
+            "props": {
+                "bendY": 1020,
+                "headStyle": "circle",
+                "lineStyle": "solid"
+            },
+            "start": {
+                "itemId": "a5662c79-1b14-49dc-94df-296496ea6967",
+                "portIndex": 2,
+                "position": {
+                    "x": 1230,
+                    "y": 920
+                }
+            },
+            "style": {
+                "bold": false,
+                "fillColor": {
+                    "a": 255,
+                    "b": 0,
+                    "g": 255,
+                    "r": 0
+                },
+                "font": "Microsoft YaHei,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1",
+                "italic": false,
+                "rotation": 0,
+                "scale": 1,
+                "strokeColor": {
+                    "a": 255,
+                    "b": 0,
+                    "g": 0,
+                    "r": 0
+                },
+                "strokeWidth": 4,
+                "underline": false
+            },
+            "text": "",
+            "typeId": "ArrowConnector",
+            "zValue": 1
+        },
+        {
+            "end": {
+                "itemId": "a5662c79-1b14-49dc-94df-296496ea6967",
+                "portIndex": 0,
+                "position": {
+                    "x": 1180,
+                    "y": 870
+                }
+            },
+            "id": "a5c0a963-dc61-4061-8acb-1dd6411b7778",
+            "kind": "connector",
+            "props": {
+            },
+            "start": {
+                "itemId": "f6e95c91-c61a-4334-adbb-ddab971e3033",
+                "portIndex": 3,
+                "position": {
+                    "x": 1060,
+                    "y": 650
+                }
+            },
+            "style": {
+                "bold": false,
+                "fillColor": {
+                    "a": 0,
+                    "b": 0,
+                    "g": 0,
+                    "r": 0
+                },
+                "font": "Microsoft YaHei,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1",
+                "italic": false,
+                "rotation": 0,
+                "scale": 1,
+                "strokeColor": {
+                    "a": 255,
+                    "b": 0,
+                    "g": 0,
+                    "r": 0
+                },
+                "strokeWidth": 2,
+                "underline": false
+            },
+            "text": "",
+            "typeId": "AllowLine",
+            "zValue": 1
+        },
+        {
+            "end": {
+                "itemId": "",
+                "portIndex": -1,
+                "position": {
+                    "x": 1540,
+                    "y": 800
+                }
+            },
+            "id": "e5c506ce-e62e-4c6d-a6c4-33b63745a74b",
+            "kind": "connector",
+            "props": {
+                "bendX": 1400
+            },
+            "start": {
+                "itemId": "",
+                "portIndex": -1,
+                "position": {
+                    "x": 1260,
+                    "y": 660
+                }
+            },
+            "style": {
+                "bold": false,
+                "fillColor": {
+                    "a": 255,
+                    "b": 0,
+                    "g": 0,
+                    "r": 0
+                },
+                "font": "Microsoft YaHei,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1",
+                "italic": false,
+                "rotation": 0,
+                "scale": 1,
+                "strokeColor": {
+                    "a": 255,
+                    "b": 0,
+                    "g": 0,
+                    "r": 0
+                },
+                "strokeWidth": 2,
+                "underline": false
+            },
+            "text": "",
+            "typeId": "ArrowConnector",
             "zValue": 1
         }
     ],

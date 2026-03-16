@@ -1,6 +1,7 @@
 #include "sessionpersistence.h"
 
 #include "documentserializer.h"
+#include "runtimepaths.h"
 
 #include <QDir>
 #include <QFile>
@@ -8,7 +9,6 @@
 #include <QJsonDocument>
 #include <QSaveFile>
 #include <QSettings>
-#include <QStandardPaths>
 
 namespace flowchart {
 
@@ -17,16 +17,7 @@ namespace {
 const char kRecentFilesKey[] = "recentFiles";
 
 QSettings settings() {
-    return QSettings();
-}
-
-QString appDataDirectory() {
-    QString directory = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (directory.isEmpty()) {
-        directory = QDir::homePath() + QStringLiteral("/.flowchart-editor");
-    }
-    QDir().mkpath(directory);
-    return directory;
+    return QSettings(RuntimePaths::settingsFilePath(), QSettings::IniFormat);
 }
 
 QString normalizedFileName(const QString& fileName) {
@@ -40,7 +31,7 @@ bool RecoverySnapshot::isValid() const {
 }
 
 QString SessionPersistence::recoveryFilePath() {
-    return QDir(appDataDirectory()).filePath(QStringLiteral("recovery.json"));
+    return RuntimePaths::recoveryFilePath();
 }
 
 bool SessionPersistence::hasRecoverySnapshot() {

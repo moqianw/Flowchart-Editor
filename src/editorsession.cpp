@@ -140,6 +140,33 @@ bool EditorSession::saveToFile(const QString& fileName, QString* errorMessage) c
     return DocumentSerializer::save(cloneAllWithResolvedEndpoints(), fileName, errorMessage);
 }
 
+bool EditorSession::reloadShapeRegistry(QStringList* warnings) {
+    if (!m_registry.reload(warnings)) {
+        // Continue even with warnings so valid components still load.
+    }
+
+    const QStringList itemIds = m_document.itemIds();
+    const QStringList selectedIds = selectedItemIds();
+    for (const QString& itemId : itemIds) {
+        removeViewForItem(itemId);
+    }
+    for (const QString& itemId : itemIds) {
+        createViewForItem(itemId);
+        syncViewForItem(itemId);
+    }
+    refreshAllConnectors();
+
+    m_scene->clearSelection();
+    for (const QString& itemId : selectedIds) {
+        if (QGraphicsItem* item = m_viewItems.value(itemId, nullptr)) {
+            item->setSelected(true);
+        }
+    }
+
+    emit documentChanged();
+    return warnings == nullptr || warnings->isEmpty();
+}
+
 void EditorSession::createItem(const QString& typeId, const QPointF& scenePos) {
     const ShapeDefinition* definition = m_registry.definition(typeId);
     if (!definition) {
@@ -149,32 +176,93 @@ void EditorSession::createItem(const QString& typeId, const QPointF& scenePos) {
     std::vector<std::unique_ptr<DiagramItemModel>> items;
     items.reserve(1);
 
-    if (definition->connector) {
-        auto connector = std::make_unique<ConnectorModel>();
-        connector->id = createItemId();
-        connector->typeId = definition->typeId;
-        connector->style = ItemStyle{};
-        if (definition->initializeStyle) {
-            definition->initializeStyle(connector->style);
-        }
-        connector->start.position = snapPoint(scenePos);
-        connector->end.position = snapPoint(
-            scenePos + QPointF(definition->defaultSize.width(), definition->defaultSize.height()));
-        items.push_back(std::move(connector));
-    } else {
-        auto node = std::make_unique<NodeModel>();
-        node->id = createItemId();
-        node->typeId = definition->typeId;
-        node->rect = snapRect(QRectF(scenePos, definition->defaultSize));
-        node->props = definition->defaultProps;
-        node->style = ItemStyle{};
-        if (definition->initializeStyle) {
-            definition->initializeStyle(node->style);
-        }
-        items.push_back(std::move(node));
+    auto node = std::make_unique<NodeModel>();
+    node->id = createItemId();
+    node->typeId = definition->typeId;
+    node->rect = snapRect(QRectF(scenePos, definition->defaultSize));
+    node->props = definition->defaultProps;
+    node->style = ItemStyle{};
+    if (definition->initializeStyle) {
+        definition->initializeStyle(node->style);
     }
+    items.push_back(std::move(node));
 
     m_undoStack->push(new AddItemsCommand(this, std::move(items), QStringLiteral("Create item")));
+}
+
+void EditorSession::createConnector(const QPointF& scenePos) {
+    std::vector<std::unique_ptr<DiagramItemModel>> items;
+    items.reserve(1);
+
+    auto connector = std::make_unique<ConnectorModel>();
+    connector->id = createItemId();
+    connector->typeId = QStringLiteral("ArrowConnector");
+    connector->style = ItemStyle{};
+    connector->style.fillColor = connector->style.strokeColor;
+    connector->start.position = snapPoint(scenePos);
+    connector->end.position = snapPoint(scenePos + QPointF(160.0, 0.0));
+    connector->props.insert(QStringLiteral("headStyle"), QStringLiteral("stealth"));
+    connector->props.insert(QStringLiteral("lineStyle"), QStringLiteral("solid"));
+    items.push_back(std::move(connector));
+
+    m_undoStack->push(new AddItemsCommand(this, std::move(items), QStringLiteral("Create connector")));
+}
+
+void EditorSession::resetSelectedConnectorBends() {
+    applyToItems(selectedItemIds(), QStringLiteral("Auto route connectors"), [](DiagramItemModel& item) {
+        if (item.kind() != ItemKind::Connector) {
+            return;
+        }
+        auto& connector = static_cast<ConnectorModel&>(item);
+        connector.props.remove(QStringLiteral("bendX"));
+        connector.props.remove(QStringLiteral("bendY"));
+    });
+}
+
+void EditorSession::routeSelectedConnectorsVertical() {
+    applyToItems(selectedItemIds(), QStringLiteral("Route connectors vertically"), [this](DiagramItemModel& item) {
+        if (item.kind() != ItemKind::Connector) {
+            return;
+        }
+        auto& connector = static_cast<ConnectorModel&>(item);
+        const QPointF start = resolveEndpoint(connector.start);
+        const QPointF end = resolveEndpoint(connector.end);
+        connector.props.remove(QStringLiteral("bendY"));
+        connector.props.insert(QStringLiteral("bendX"), snapCoordinate((start.x() + end.x()) / 2.0));
+    });
+}
+
+void EditorSession::routeSelectedConnectorsHorizontal() {
+    applyToItems(selectedItemIds(), QStringLiteral("Route connectors horizontally"), [this](DiagramItemModel& item) {
+        if (item.kind() != ItemKind::Connector) {
+            return;
+        }
+        auto& connector = static_cast<ConnectorModel&>(item);
+        const QPointF start = resolveEndpoint(connector.start);
+        const QPointF end = resolveEndpoint(connector.end);
+        connector.props.remove(QStringLiteral("bendX"));
+        connector.props.insert(QStringLiteral("bendY"), snapCoordinate((start.y() + end.y()) / 2.0));
+    });
+}
+
+void EditorSession::setSelectedConnectorHeadStyle(const QString& headStyle) {
+    applyToItems(selectedItemIds(), QStringLiteral("Change connector head style"), [headStyle](DiagramItemModel& item) {
+        if (item.kind() != ItemKind::Connector) {
+            return;
+        }
+        auto& connector = static_cast<ConnectorModel&>(item);
+        connector.props.insert(QStringLiteral("headStyle"), headStyle);
+    });
+}
+
+void EditorSession::setSelectedConnectorLineStyle(const QString& lineStyle) {
+    applyToItems(selectedItemIds(), QStringLiteral("Change connector line style"), [lineStyle](DiagramItemModel& item) {
+        if (item.kind() != ItemKind::Connector) {
+            return;
+        }
+        auto& connector = static_cast<ConnectorModel&>(item);
+        connector.props.insert(QStringLiteral("lineStyle"), lineStyle);
+    });
 }
 
 void EditorSession::deleteSelected() {

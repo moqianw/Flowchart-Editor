@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 3.21)
 
 project(FlowchartEditor LANGUAGES CXX)
 
-if(NOT DEFINED CMAKE_PREFIX_PATH)
-    set(CMAKE_PREFIX_PATH "D:/Qt/6.9.3/msvc2022_64")
-endif()
+
+set(CMAKE_PREFIX_PATH "D:/Qt/6.9.3/msvc2022_64")
+
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -28,6 +28,8 @@ set(FLOWCHART_EDITOR_SOURCES
     src/canvasitems.cpp
     src/canvasview.cpp
     src/commands.cpp
+    src/componentextensionmanager.cpp
+    src/customcomponentdialog.cpp
     src/diagramdocument.cpp
     src/diagramtypes.cpp
     src/documentserializer.cpp
@@ -36,11 +38,14 @@ set(FLOWCHART_EDITOR_SOURCES
     src/mainwindow.cpp
     src/mermaidexporter.cpp
     src/palettebutton.cpp
+    src/runtimepaths.cpp
     src/sessionpersistence.cpp
     src/shaperegistry.cpp
     include/canvasitems.h
     include/canvasview.h
     include/commands.h
+    include/componentextensionmanager.h
+    include/customcomponentdialog.h
     include/diagramdocument.h
     include/diagramtypes.h
     include/documentserializer.h
@@ -48,6 +53,7 @@ set(FLOWCHART_EDITOR_SOURCES
     include/mainwindow.h
     include/mermaidexporter.h
     include/palettebutton.h
+    include/runtimepaths.h
     include/sessionpersistence.h
     include/shaperegistry.h
     ui/mainwindow.ui
