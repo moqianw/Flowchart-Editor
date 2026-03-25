@@ -9,6 +9,14 @@
 - 本地运行数据落在可执行文件旁的 `runtime-data/`
 - 基于 TCP 的 P2P 直连协同：房主开房，其他人输入 `IP:端口` 直连
 
+
+
+# 演示
+
+<video src="E:\Documents\qt\Flowchart-Editor-master\read.mp4" controls=""></video>
+
+
+
 ## 1. 主要能力
 
 ### 编辑器能力
@@ -205,10 +213,6 @@ out/build-vs/portable/Release/
 - `parallelogram`
 
 示例见 [examples/custom-components-pack.json](examples/custom-components-pack.json)。
-
-
-
-<video src="E:\Documents\qt\Flowchart-Editor-master\read.mp4" controls=""></video>
 
 
 
