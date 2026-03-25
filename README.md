@@ -206,6 +206,12 @@ out/build-vs/portable/Release/
 
 示例见 [examples/custom-components-pack.json](examples/custom-components-pack.json)。
 
+
+
+<video src="E:\Documents\qt\Flowchart-Editor-master\read.mp4" controls=""></video>
+
+
+
 ## 7. 当前限制
 
 - 协同只支持单个对端
